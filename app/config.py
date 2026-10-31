@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import urllib.parse
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -39,6 +40,12 @@ def _bool_env(name: str, default: str = "false") -> bool:
     return (os.getenv(name) or default).strip().lower() == "true"
 
 
+# 若平台提供單一連線字串（如 Railway 的 MYSQL_URL / 通用 DATABASE_URL），優先解析它，
+# 省去逐一對應 host/port/user/password/db 五個變數（也避免引用名打錯）。
+_MYSQL_URL = os.getenv("MYSQL_URL") or os.getenv("DATABASE_URL") or ""
+_MU = urllib.parse.urlparse(_MYSQL_URL) if _MYSQL_URL.startswith(("mysql://", "mysql+pymysql://")) else None
+
+
 class Settings:
     # 認證
     JWT_SECRET: str = os.getenv("JWT_SECRET", "dev-only-change-me")
@@ -50,11 +57,11 @@ class Settings:
     # 資料庫（開發/測試：sqlite；生產：mysql）
     DB_BACKEND: str = os.getenv("DB_BACKEND", "sqlite")  # sqlite | mysql
     SQLITE_PATH: str = os.getenv("SQLITE_PATH", str(BASE_DIR / "data" / "app.db"))
-    MYSQL_HOST: str = os.getenv("MYSQL_HOST") or "127.0.0.1"
-    MYSQL_PORT: int = _int_env("MYSQL_PORT", "3306")
-    MYSQL_USER: str = os.getenv("MYSQL_USER") or "root"
-    MYSQL_PASSWORD: str = os.getenv("MYSQL_PASSWORD", "")
-    MYSQL_DB: str = os.getenv("MYSQL_DB") or "portfolio_health"
+    MYSQL_HOST: str = (_MU.hostname if _MU else None) or os.getenv("MYSQL_HOST") or "127.0.0.1"
+    MYSQL_PORT: int = (_MU.port if _MU and _MU.port else None) or _int_env("MYSQL_PORT", "3306")
+    MYSQL_USER: str = (_MU.username if _MU else None) or os.getenv("MYSQL_USER") or "root"
+    MYSQL_PASSWORD: str = (_MU.password if _MU else None) or os.getenv("MYSQL_PASSWORD", "")
+    MYSQL_DB: str = (_MU.path.lstrip("/") if _MU and _MU.path else None) or os.getenv("MYSQL_DB") or "portfolio_health"
     # 部署用：啟動時若使用者表為空，自動跑 seed_demo 建 demo 帳號與資料（本地預設關閉）
     AUTO_SEED: bool = _bool_env("AUTO_SEED")
 
