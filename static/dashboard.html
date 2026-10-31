@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>投資組合健檢 — 儀表板</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    .anom-badge { display:inline-block; margin:2px 4px 2px 0; padding:1px 7px; border-radius:10px;
+      font-size:12px; line-height:1.6; color:#fff; white-space:nowrap; }
+    .sev-極端 { background:#c0392b; } .sev-顯著 { background:#e67e22; } .sev-注意 { background:#b7950b; }
+    .anom-none { color:#6b7686; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>AI 投資組合健檢系統</h1>
+    <div><span class="user" id="who"></span> &nbsp;
+      <a href="/radar">財報變動雷達</a> &nbsp; <a href="#" id="logout">登出</a></div>
+  </div>
+
+  <div class="container">
+    <div id="err" class="error-box hidden" style="margin-bottom:16px"></div>
+
+    <!-- 持股管理 -->
+    <div class="card">
+      <h2>持股管理</h2>
+      <p class="hint" id="asof"></p>
+      <table id="holdingsTbl">
+        <thead><tr>
+          <th>代號 / 名稱</th><th>產業</th><th>股數</th><th>最新價</th><th>市值</th><th>狀態</th><th>財報變動</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+      <p id="noHold" class="hint hidden">尚未新增持股。試著加入 2330.TW、2317.TW、2412.TW 來體驗健檢。</p>
+
+      <h2 style="margin-top:22px">新增持股</h2>
+      <div class="row">
+        <div><label>股票代號（例：2330.TW）</label><input id="f_symbol" placeholder="2330.TW"></div>
+        <div><label>股數</label><input id="f_shares" type="number" min="0" step="0.000001" placeholder="1000"></div>
+        <div><label>平均成本（選填）</label><input id="f_cost" type="number" min="0" step="0.0001"></div>
+        <button id="addBtn">新增</button>
+      </div>
+      <p class="hint" style="margin-bottom:0">MVP 僅支援台股。上市加 <code>.TW</code>、上櫃加 <code>.TWO</code>。</p>
+    </div>
+
+    <!-- 產生健檢 -->
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div><h2 style="margin:0">風險健檢</h2><p class="hint" style="margin:4px 0 0">所有持股狀態為「可計算」時才能產生健檢。</p></div>
+        <button id="runBtn" style="max-width:220px">產生健檢</button>
+      </div>
+      <p id="runMsg" class="hint hidden" style="margin-top:12px"></p>
+    </div>
+
+    <!-- 結果 -->
+    <div id="results" class="hidden">
+      <div class="card">
+        <h2>風險評分</h2>
+        <div class="score-hero">
+          <div style="text-align:center">
+            <div class="score-num" id="scoreNum">—</div>
+            <span class="level-pill" id="levelPill">—</span>
+          </div>
+          <div class="subbars" id="subbars"></div>
+        </div>
+        <p class="hint" style="margin-bottom:0">分數為 0–100 的<strong>啟發式</strong>指標（非學術標準），由五項風險特徵線性加權，門檻與權重可於 <code>SCORE_CONFIG</code> 調整。</p>
+      </div>
+
+      <div class="grid grid-5" id="metrics"></div>
+
+      <div class="grid grid-2">
+        <div class="card"><h2>持股配置</h2><canvas id="pieHold"></canvas><p id="pieHoldEmpty" class="chart-empty hidden">無資料</p></div>
+        <div class="card"><h2>產業配置</h2><canvas id="pieSector"></canvas><p id="pieSectorEmpty" class="chart-empty hidden">無資料</p></div>
+      </div>
+
+      <div class="card">
+        <h2>累積報酬曲線（以目前權重回溯，固定權重、每日再平衡）</h2>
+        <canvas id="lineCurve" height="110"></canvas>
+      </div>
+
+      <div class="card report">
+        <h2 style="display:flex;justify-content:space-between">AI 健檢報告 <span class="source-tag" id="srcTag"></span></h2>
+        <div id="reportBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const err = document.getElementById('err');
+    const showErr = (m) => { err.textContent = m; err.classList.remove('hidden'); window.scrollTo(0,0); };
+    const hideErr = () => err.classList.add('hidden');
+
+    // 與 style.css 一致的類別色盤（色盲友善、明暗皆可讀）
+    const PALETTE = ['#2f6df6','#2e9e63','#e0a526','#8b5cf6','#d8503a','#17a2b8','#e06fae','#6b7686','#3fae8f','#c2693a'];
+
+    async function jget(path) {
+      const r = await fetch('/api' + path);
+      if (r.status === 401) { location.href = '/'; return; }
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error?.message || '發生錯誤');
+      return d;
+    }
+    async function jsend(method, path, body) {
+      const r = await fetch('/api' + path, {
+        method, headers: body ? { 'Content-Type': 'application/json' } : {},
+        body: body ? JSON.stringify(body) : undefined
+      });
+      if (r.status === 401) { location.href = '/'; return; }
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const e = new Error(d?.error?.message || '發生錯誤');
+        e.details = d?.error?.details; throw e;
+      }
+      return d;
+    }
+
+    const fmtPct = (x) => (x * 100).toFixed(1) + '%';
+    const STATUS_LABEL = { ready: ['可計算','ready'], loading: ['準備中','loading'], insufficient: ['資料不足','insufficient'], error: ['錯誤','error'] };
+
+    // 財報變動旗標的短標籤（儀表板徽章用）
+    const RULE_SHORT = { 'R-REV-YOY':'月營收', 'R-GM-SHIFT':'毛利率', 'R-AR-DIV':'應收', 'R-INV-DIV':'存貨', 'R-ACCRUAL':'現金流' };
+    function alertBadges(list) {
+      if (!list || !list.length) return '<span class="anom-none">—</span>';
+      return list.map(a => `<span class="anom-badge sev-${a.severity}" title="${a.rule}（${a.period}）">${RULE_SHORT[a.rule_id]||a.rule_id}·${a.severity}</span>`).join('');
+    }
+
+    let holdings = [];
+    async function loadHoldings() {
+      const d = await jget('/holdings');
+      holdings = d.items;
+      // 財報變動旗標（容錯：取不到也不影響持股顯示）
+      let alertsBySym = {};
+      try {
+        const al = await jget('/holdings/alerts');
+        for (const a of (al.items||[])) (alertsBySym[a.symbol] ||= []).push(a);
+      } catch (e) { /* 忽略 */ }
+      const tb = document.querySelector('#holdingsTbl tbody');
+      tb.innerHTML = '';
+      document.getElementById('noHold').classList.toggle('hidden', holdings.length > 0);
+      for (const h of holdings) {
+        const [label, cls] = STATUS_LABEL[h.status] || STATUS_LABEL.error;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${h.symbol}</strong><br><span class="hint">${h.name||''}</span></td>
+          <td>${h.sector||'未分類'}</td>
+          <td>${h.shares}</td>
+          <td>${h.last_close!=null?h.last_close.toLocaleString():'—'}</td>
+          <td>${h.market_value!=null?Math.round(h.market_value).toLocaleString():'—'}</td>
+          <td><span class="badge ${cls}">${label}</span></td>
+          <td>${alertBadges(alertsBySym[h.symbol])}</td>
+          <td><button class="danger" data-del="${h.id}">刪除</button></td>`;
+        tb.appendChild(tr);
+      }
+      tb.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+        if (!confirm('確定刪除這筆持股？')) return;
+        try { await jsend('DELETE', '/holdings/' + b.dataset.del); await loadHoldings(); }
+        catch (ex) { showErr(ex.message); }
+      });
+      const allReady = holdings.length > 0 && holdings.every(h => h.status === 'ready');
+      document.getElementById('runBtn').disabled = !allReady;
+      document.getElementById('runMsg').classList.toggle('hidden', allReady);
+      if (!allReady) {
+        const bad = holdings.filter(h => h.status !== 'ready').map(h => h.symbol);
+        document.getElementById('runMsg').textContent = holdings.length === 0
+          ? '請先新增至少一檔台股持股。'
+          : '以下股票尚未就緒：' + bad.join('、');
+      }
+    }
+
+    document.getElementById('addBtn').onclick = async () => {
+      hideErr();
+      const symbol = document.getElementById('f_symbol').value.trim();
+      const shares = parseFloat(document.getElementById('f_shares').value);
+      const cost = document.getElementById('f_cost').value;
+      if (!symbol || !(shares > 0)) return showErr('請輸入正確的代號與大於 0 的股數。');
+      const btn = document.getElementById('addBtn');
+      btn.disabled = true; btn.innerHTML = '處理中…';
+      try {
+        await jsend('POST', '/holdings', { symbol, shares, avg_cost: cost ? parseFloat(cost) : null });
+        document.getElementById('f_symbol').value = '';
+        document.getElementById('f_shares').value = '';
+        document.getElementById('f_cost').value = '';
+        await loadHoldings();
+      } catch (ex) { showErr(ex.message); }
+      finally { btn.disabled = false; btn.textContent = '新增'; }
+    };
+
+    let charts = {};
+    function drawPie(id, emptyId, labels, data) {
+      const empty = !labels.length;
+      document.getElementById(emptyId).classList.toggle('hidden', !empty);
+      document.getElementById(id).classList.toggle('hidden', empty);
+      if (empty) return;
+      charts[id]?.destroy();
+      charts[id] = new Chart(document.getElementById(id), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data, backgroundColor: labels.map((_, i) => PALETTE[i % PALETTE.length]), borderWidth: 0 }] },
+        options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } },
+          tooltip: { callbacks: { label: (c) => `${c.label}：${(c.parsed*100).toFixed(1)}%` } } } }
+      });
+    }
+    function drawLine(dates, values) {
+      charts.line?.destroy();
+      charts.line = new Chart(document.getElementById('lineCurve'), {
+        type: 'line',
+        data: { labels: dates, datasets: [{ data: values, borderColor: PALETTE[0], backgroundColor: 'rgba(47,109,246,.12)',
+          fill: true, pointRadius: 0, borderWidth: 2, tension: .15 }] },
+        options: { plugins: { legend: { display: false },
+            tooltip: { callbacks: { label: (c) => '淨值 ' + c.parsed.y.toFixed(3) } } },
+          scales: { x: { ticks: { maxTicksLimit: 8 } }, y: { ticks: { callback: (v) => v.toFixed(2) } } } }
+      });
+    }
+
+    const SUB_LABEL = { top1_weight: '單一持股集中', sector_hhi: '產業集中', volatility: '波動度', max_drawdown_abs: '最大回撤', avg_correlation: '相關性' };
+
+    // 極簡 Markdown 渲染（只處理 ## 標題、- 清單、段落），報告內容來自後端，非使用者輸入
+    function renderReport(md) {
+      const esc = (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const lines = md.split('\n'); let html = '', inUl = false;
+      const closeUl = () => { if (inUl) { html += '</ul>'; inUl = false; } };
+      for (let raw of lines) {
+        const line = raw.trimEnd();
+        if (line.startsWith('## ')) { closeUl(); html += `<h2>${esc(line.slice(3))}</h2>`; }
+        else if (line.startsWith('- ')) { if (!inUl) { html += '<ul>'; inUl = true; } html += `<li>${esc(line.slice(2)).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')}</li>`; }
+        else if (line.trim() === '') { closeUl(); }
+        else { closeUl(); html += `<p>${esc(line).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')}</p>`; }
+      }
+      closeUl();
+      return html;
+    }
+
+    function renderResult(res) {
+      const m = res.metrics, s = m.score;
+      document.getElementById('results').classList.remove('hidden');
+      document.getElementById('scoreNum').textContent = s.score;
+      const pill = document.getElementById('levelPill');
+      pill.textContent = '風險 ' + s.level; pill.className = 'level-pill level-' + s.level;
+
+      document.getElementById('subbars').innerHTML = Object.entries(s.sub_scores).map(([k, v]) =>
+        `<div class="subbar"><div class="l"><span>${SUB_LABEL[k]||k}</span><span>${v.toFixed(0)}</span></div>
+         <div class="track"><span style="width:${v}%"></span></div></div>`).join('');
+
+      const cards = [
+        ['最大單一持股', fmtPct(m.top1_weight) + `<div class="hint">${m.top1_symbol}</div>`],
+        ['產業集中度 HHI', m.sector_hhi.toFixed(3)],
+        ['年化波動度', fmtPct(m.volatility)],
+        ['最大回撤', fmtPct(m.max_drawdown)],
+        ['平均相關係數', m.avg_correlation.toFixed(2)],
+      ];
+      document.getElementById('metrics').innerHTML = cards.map(([k, v]) =>
+        `<div class="card metric"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('');
+
+      const w = m.weights, sw = m.sector_weights;
+      drawPie('pieHold', 'pieHoldEmpty', Object.keys(w), Object.values(w));
+      drawPie('pieSector', 'pieSectorEmpty', Object.keys(sw), Object.values(sw));
+      drawLine(res.curve.dates, res.curve.values);
+
+      document.getElementById('srcTag').textContent =
+        res.report_source === 'llm' ? 'LLM 生成' : '規則式備援（LLM 未啟用或失敗）';
+      document.getElementById('reportBody').innerHTML = renderReport(res.ai_report)
+        + `<p class="hint" style="margin-top:14px">資料截至 ${m.data_as_of}，觀察 ${m.n_observations} 個交易日。</p>`
+        + `<p class="disclaimer">${'本報告僅為依歷史資料計算的風險分析，不構成投資建議，歷史表現不代表未來。'}</p>`;
+      document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    document.getElementById('runBtn').onclick = async () => {
+      hideErr();
+      const btn = document.getElementById('runBtn');
+      btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 正在分析歷史資料…';
+      try { renderResult(await jsend('POST', '/reports')); }
+      catch (ex) {
+        let msg = ex.message;
+        if (ex.details?.symbols?.length) msg += '（' + ex.details.symbols.join('、') + '）';
+        showErr(msg);
+      }
+      finally { btn.disabled = false; btn.textContent = '產生健檢'; loadHoldings(); }
+    };
+
+    document.getElementById('logout').onclick = async (e) => {
+      e.preventDefault();
+      try { await jsend('POST', '/auth/logout'); } finally { location.href = '/'; }
+    };
+
+    (async function init() {
+      try {
+        const me = await jget('/auth/me');
+        document.getElementById('who').textContent = me.display_name;
+        await loadHoldings();
+      } catch (ex) { location.href = '/'; }
+    })();
+  </script>
+</body>
+</html>

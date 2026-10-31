@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>財報變動雷達</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    .sev-pill { display:inline-block; padding:1px 9px; border-radius:10px; font-size:13px; color:#fff; }
+    .sev-極端 { background:#c0392b; } .sev-顯著 { background:#e67e22; } .sev-注意 { background:#b7950b; }
+    .filters { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+    .filters label { display:block; font-size:13px; color:#6b7686; margin-bottom:3px; }
+    #anomTbl tbody tr { cursor:pointer; }
+    #anomTbl tbody tr:hover { background:rgba(47,109,246,.06); }
+    .src-tag { font-size:12px; color:#6b7686; font-weight:normal; }
+    .disclaimer { color:#6b7686; font-size:13px; margin-top:12px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>財報變動雷達</h1>
+    <div><a href="/dashboard">← 回儀表板</a> &nbsp; <a href="/eval">評估實驗</a> &nbsp; <a href="#" id="logout">登出</a></div>
+  </div>
+
+  <div class="container">
+    <div id="err" class="error-box hidden" style="margin-bottom:16px"></div>
+
+    <div class="card">
+      <div class="filters">
+        <div>
+          <label>嚴重度</label>
+          <select id="fSev"><option value="">全部</option><option>極端</option><option>顯著</option><option>注意</option></select>
+        </div>
+        <div>
+          <label>規則</label>
+          <select id="fRule">
+            <option value="">全部</option>
+            <option value="R-REV-YOY">月營收年增率顯著變動</option>
+            <option value="R-GM-SHIFT">毛利率顯著變動</option>
+            <option value="R-AR-DIV">應收帳款成長快於營收</option>
+            <option value="R-INV-DIV">存貨成長快於營收</option>
+            <option value="R-ACCRUAL">帳面獲利與現金流落差大</option>
+          </select>
+        </div>
+        <button id="applyBtn" style="max-width:120px">套用</button>
+        <button id="scanBtn" class="secondary" style="max-width:160px">重新掃描</button>
+      </div>
+      <p class="hint" id="count" style="margin:12px 0 0"></p>
+    </div>
+
+    <div class="card">
+      <table id="anomTbl">
+        <thead><tr>
+          <th>公司</th><th>產業</th><th>規則</th><th>期間</th><th>嚴重度</th><th>方向</th><th>範圍</th><th>z</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+      <p id="empty" class="hint hidden">目前沒有符合條件的財報變動旗標。可先執行「重新掃描」。</p>
+    </div>
+
+    <div id="detail" class="card hidden">
+      <h2 style="display:flex;justify-content:space-between;align-items:center">
+        <span id="dTitle"></span><span class="src-tag" id="dSrc"></span>
+      </h2>
+      <canvas id="dChart" height="110"></canvas>
+      <div style="margin-top:10px">
+        <button id="explainBtn" style="max-width:220px"></button>
+        <span class="hint" id="explainHint"></span>
+      </div>
+      <div id="dBody" class="report" style="margin-top:12px"></div>
+      <div id="dNews" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <script>
+    const err = document.getElementById('err');
+    const showErr = (m) => { err.textContent = m; err.classList.remove('hidden'); window.scrollTo(0,0); };
+    const DIR = { up:'上升', down:'下降' }, SCOPE = { company:'公司', industry:'產業' };
+
+    async function jget(path) {
+      const r = await fetch('/api' + path);
+      if (r.status === 401) { location.href = '/'; return; }
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error?.message || '發生錯誤');
+      return d;
+    }
+    async function jsend(method, path) {
+      const r = await fetch('/api' + path, { method });
+      if (r.status === 401) { location.href = '/'; return; }
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.error?.message || '發生錯誤');
+      return d;
+    }
+
+    // 極簡 Markdown（## 標題、- 清單、段落）；內容來自後端，非使用者輸入
+    function renderMd(md) {
+      const esc = (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const lines = md.split('\n'); let html = '', inUl = false;
+      const closeUl = () => { if (inUl) { html += '</ul>'; inUl = false; } };
+      for (const raw of lines) {
+        const line = raw.trimEnd();
+        if (line.startsWith('## ')) { closeUl(); html += `<h3>${esc(line.slice(3))}</h3>`; }
+        else if (line.startsWith('- ')) { if (!inUl) { html += '<ul>'; inUl = true; } html += `<li>${esc(line.slice(2))}</li>`; }
+        else if (line.trim() === '') closeUl();
+        else { closeUl(); html += `<p>${esc(line)}</p>`; }
+      }
+      closeUl(); return html;
+    }
+
+    // 把解讀文字中的 [n] 轉成可點新聞連結（只允許 http/https）
+    function linkifyCitations(html, news) {
+      const map = {};
+      for (const nw of (news||[])) if (/^https?:\/\//.test(nw.link)) map[nw.n] = nw.link;
+      return html.replace(/\[(\d+)\]/g, (m, n) => map[n]
+        ? `<a href="${map[n]}" target="_blank" rel="noopener">[${n}]</a>` : m);
+    }
+    function renderNews(news) {
+      if (!news || !news.length) return '';
+      const esc = (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const li = news.map(nw => `<li>[${nw.n}] ${nw.published_at} ${esc(nw.source||'')}｜`
+        + (/^https?:\/\//.test(nw.link) ? `<a href="${nw.link}" target="_blank" rel="noopener">${esc(nw.title)}</a>` : esc(nw.title))
+        + '</li>').join('');
+      return `<h3>引用新聞</h3><ul>${li}</ul>`;
+    }
+
+    let chart, curId = null, curDetail = null;
+    function renderDetail(d) {
+      curDetail = d;
+      document.getElementById('detail').classList.remove('hidden');
+      document.getElementById('dTitle').textContent = `${d.name||''}（${d.symbol}）— ${d.rule}　${d.period}`;
+      document.getElementById('dSrc').textContent = d.explanation_source === 'llm' ? 'AI 生成（附引用）' : '規則式備援';
+      const s = d.series || {};
+      let labels = s.labels || [], values, ylabel;
+      if (d.rule_id === 'R-REV-YOY') { values = (s.yoy||[]).map(v => v==null?null:v*100); ylabel = '營收年增率 %'; }
+      else { values = (s.values||[]).map(v => v==null?null:v*100); ylabel = (s.metric || '指標') + '（%）'; }
+      chart?.destroy();
+      chart = new Chart(document.getElementById('dChart'), {
+        type: 'line',
+        data: { labels, datasets: [{ data: values, borderColor:'#2f6df6', backgroundColor:'rgba(47,109,246,.12)', fill:true, pointRadius:2, borderWidth:2, tension:.15 }] },
+        options: { plugins:{ legend:{display:false}, title:{display:true,text:ylabel} },
+          scales:{ x:{ ticks:{ maxTicksLimit:8 } } } }
+      });
+      const body = linkifyCitations(renderMd(d.explanation), d.news);
+      document.getElementById('dBody').innerHTML = body
+        + `<p class="disclaimer">本內容僅為依公開財報數字計算的變動說明，不構成投資建議，也不代表對公司經營或誠信的判斷。</p>`;
+      document.getElementById('dNews').innerHTML = renderNews(d.news);
+      const btn = document.getElementById('explainBtn');
+      btn.textContent = d.explanation_source === 'llm' ? '重新產生 AI 解讀' : '產生 AI 解讀（RAG）';
+      document.getElementById('explainHint').textContent = d.explanation_source === 'llm'
+        ? '已附新聞引用，程式驗證每點來源' : '目前為規則式備援；點左鈕以新聞來源產生附引用的 AI 解讀';
+    }
+
+    async function openDetail(id) {
+      try {
+        curId = id;
+        renderDetail(await jget('/anomalies/' + id));
+        document.getElementById('detail').scrollIntoView({ behavior:'smooth' });
+      } catch (ex) { showErr(ex.message); }
+    }
+
+    document.getElementById('explainBtn').onclick = async () => {
+      if (curId == null) return;
+      const btn = document.getElementById('explainBtn');
+      const old = btn.textContent; btn.disabled = true; btn.textContent = '產生中…（抓新聞→檢索→AI）';
+      try {
+        const force = curDetail && curDetail.explanation_source === 'llm';
+        renderDetail(await jsend('POST', `/anomalies/${curId}/explain${force ? '?force=true' : ''}`));
+      } catch (ex) { showErr(ex.message); btn.textContent = old; }
+      finally { btn.disabled = false; }
+    };
+
+    async function load() {
+      err.classList.add('hidden');
+      const sev = document.getElementById('fSev').value;
+      const rule = document.getElementById('fRule').value;
+      const qs = new URLSearchParams();
+      if (sev) qs.set('severity', sev);
+      if (rule) qs.set('rule', rule);
+      const d = await jget('/anomalies' + (qs.toString() ? '?' + qs : ''));
+      const items = d.items || [];
+      const tb = document.querySelector('#anomTbl tbody');
+      tb.innerHTML = '';
+      document.getElementById('empty').classList.toggle('hidden', items.length > 0);
+      document.getElementById('count').textContent = `共 ${items.length} 個旗標（依嚴重度、期間排序）`;
+      for (const a of items) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${a.symbol}</strong><br><span class="hint">${a.name||''}</span></td>
+          <td>${a.sector||'—'}</td>
+          <td>${a.rule}</td>
+          <td>${a.period}</td>
+          <td><span class="sev-pill sev-${a.severity}">${a.severity}</span></td>
+          <td>${DIR[a.direction]||a.direction}</td>
+          <td>${SCOPE[a.scope]||'—'}</td>
+          <td>${a.z!=null?a.z.toFixed(1):'—'}</td>`;
+        tr.onclick = () => openDetail(a.id);
+        tb.appendChild(tr);
+      }
+    }
+
+    document.getElementById('applyBtn').onclick = () => load().catch(ex => showErr(ex.message));
+    document.getElementById('scanBtn').onclick = async () => {
+      const b = document.getElementById('scanBtn');
+      b.disabled = true; b.textContent = '掃描中…';
+      try { const r = await jsend('POST', '/anomalies/scan'); await load(); showErrOk(`完成：偵測到 ${r.n_flags} 個旗標`); }
+      catch (ex) { showErr(ex.message); }
+      finally { b.disabled = false; b.textContent = '重新掃描'; }
+    };
+    function showErrOk(m){ err.textContent = m; err.className='error-box'; err.style.background='#e8f5e9'; err.style.color='#2e7d32'; err.classList.remove('hidden'); }
+    document.getElementById('logout').onclick = async (e) => { e.preventDefault(); try { await jsend('POST','/auth/logout'); } finally { location.href='/'; } };
+
+    (async function init(){ try { await jget('/auth/me'); await load(); } catch(ex){ location.href='/'; } })();
+  </script>
+</body>
+</html>

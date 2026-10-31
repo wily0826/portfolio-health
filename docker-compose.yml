@@ -1,0 +1,22 @@
+# 本機開發用 MySQL 8（T-02）。資料存於具名 volume，容器重啟不遺失。
+# 啟動：docker compose up -d   停止：docker compose stop   清空：docker compose down -v
+services:
+  mysql:
+    image: mysql:8
+    container_name: pht-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: devroot      # ⚠️ 僅本機開發；正式部署改強密碼並用 secrets
+      MYSQL_DATABASE: portfolio_health
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3307:3306"                     # host 3307 → 容器 3306（避免與本機 3306 衝突）
+    volumes:
+      - pht_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pdevroot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pht_mysql_data:

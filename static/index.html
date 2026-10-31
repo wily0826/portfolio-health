@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI 投資組合健檢系統 — 登入</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="card auth-card">
+      <h1 style="font-size:20px;margin:0 0 4px">AI 投資組合健檢系統</h1>
+      <p class="hint" style="margin-top:0">輸入台股持股，由系統計算風險指標並產生白話健檢報告。</p>
+
+      <div id="err" class="error-box hidden" style="margin:10px 0"></div>
+
+      <!-- 登入 -->
+      <form id="loginForm">
+        <label>Email</label>
+        <input type="email" id="l_email" required autocomplete="email">
+        <label>密碼</label>
+        <input type="password" id="l_pw" required autocomplete="current-password">
+        <button type="submit" style="margin-top:16px">登入</button>
+        <p class="hint" style="text-align:center;margin-bottom:0">
+          還沒有帳號？<a href="#" id="toReg">前往註冊</a>
+        </p>
+      </form>
+
+      <!-- 註冊 -->
+      <form id="regForm" class="hidden">
+        <label>顯示名稱</label>
+        <input type="text" id="r_name" required>
+        <label>Email</label>
+        <input type="email" id="r_email" required autocomplete="email">
+        <label>密碼（至少 8 碼）</label>
+        <input type="password" id="r_pw" required minlength="8" autocomplete="new-password">
+        <label>確認密碼</label>
+        <input type="password" id="r_pw2" required minlength="8">
+        <button type="submit" style="margin-top:16px">註冊</button>
+        <p class="hint" style="text-align:center;margin-bottom:0">
+          已經有帳號？<a href="#" id="toLogin">返回登入</a>
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const err = document.getElementById('err');
+    const showErr = (m) => { err.textContent = m; err.classList.remove('hidden'); };
+    const hideErr = () => err.classList.add('hidden');
+
+    const loginForm = document.getElementById('loginForm');
+    const regForm = document.getElementById('regForm');
+    document.getElementById('toReg').onclick = (e) => { e.preventDefault(); hideErr(); loginForm.classList.add('hidden'); regForm.classList.remove('hidden'); };
+    document.getElementById('toLogin').onclick = (e) => { e.preventDefault(); hideErr(); regForm.classList.add('hidden'); loginForm.classList.remove('hidden'); };
+
+    async function api(path, body) {
+      const r = await fetch('/api' + path, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data?.error?.message || '發生錯誤');
+      return data;
+    }
+
+    loginForm.onsubmit = async (e) => {
+      e.preventDefault(); hideErr();
+      try {
+        await api('/auth/login', { email: l_email.value, password: l_pw.value });
+        location.href = '/dashboard';
+      } catch (ex) { showErr(ex.message); }
+    };
+
+    regForm.onsubmit = async (e) => {
+      e.preventDefault(); hideErr();
+      if (r_pw.value !== r_pw2.value) return showErr('兩次密碼不一致');
+      try {
+        await api('/auth/register', { email: r_email.value, password: r_pw.value, display_name: r_name.value });
+        await api('/auth/login', { email: r_email.value, password: r_pw.value });
+        location.href = '/dashboard';
+      } catch (ex) { showErr(ex.message); }
+    };
+  </script>
+</body>
+</html>

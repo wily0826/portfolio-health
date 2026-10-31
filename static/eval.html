@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>評估實驗</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    .big { font-size:34px; font-weight:700; }
+    .big.good { color:#2e9e63; } .big.bad { color:#d8503a; }
+    .kv { display:flex; gap:24px; flex-wrap:wrap; }
+    .kv > div { flex:1; min-width:200px; }
+    .note { color:#6b7686; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>評估實驗（RAG 的價值）</h1>
+    <div><a href="/radar">財報變動雷達</a> &nbsp; <a href="/dashboard">儀表板</a> &nbsp; <a href="#" id="logout">登出</a></div>
+  </div>
+
+  <div class="container">
+    <div id="err" class="error-box hidden" style="margin-bottom:16px"></div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div>
+          <h2 style="margin:0">E-2 引用忠實度：有 RAG vs 沒有 RAG</h2>
+          <p class="note" style="margin:4px 0 0">同一批旗標各產生兩版解讀，統計「可能原因」中<strong>未標示來源也未標註推測</strong>的斷言比例。比例越低越好。</p>
+        </div>
+        <button id="runBtn" style="max-width:200px">重跑評估</button>
+      </div>
+      <div class="kv" style="margin-top:16px">
+        <div>
+          <div class="note">有 RAG（本系統，強制引用）</div>
+          <div class="big good" id="ragRatio">—</div>
+          <div class="note" id="ragDetail"></div>
+        </div>
+        <div>
+          <div class="note">沒有 RAG（直接問 LLM）</div>
+          <div class="big bad" id="noragRatio">—</div>
+          <div class="note" id="noragDetail"></div>
+        </div>
+      </div>
+      <canvas id="chart" height="90" style="margin-top:12px"></canvas>
+      <p class="note" id="e2note" style="margin-top:10px"></p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 6px">E-1 規則合理性：可解釋比例</h2>
+      <p class="note" style="margin:0 0 10px">嚴重度最高的旗標中，RAG 解讀能附上來源說明的比例。</p>
+      <div class="big" id="e1Ratio">—</div>
+      <div class="note" id="e1Detail"></div>
+      <p class="note" id="e1note" style="margin-top:8px"></p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 6px">怎麼解讀</h2>
+      <ul class="note">
+        <li>本頁的「無根據陳述比例」是<strong>引用紀律</strong>的自動、可重現指標：RAG 強制每點附 <code>[n]</code> 或標「（推測）」，故比例趨近 0；沒有 RAG 時 LLM 會講出一堆沒標來源的斷言。</li>
+        <li>更細的「支持／部分支持／不支持」由人工在 <code>eval_output/e2_claims.csv</code> 標註後存回 <code>eval_labels</code>（建議找同學互標、比對一致性）。</li>
+        <li>E-1 以合成新聞跑時新聞為刻意植入，比例僅在 <code>NEWS_SOURCE=finmind</code> 下具意義。</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    const err = document.getElementById('err');
+    const showErr = (m) => { err.textContent = m; err.classList.remove('hidden'); window.scrollTo(0,0); };
+    const pct = (x) => (x*100).toFixed(1) + '%';
+    async function jget(p){ const r=await fetch('/api'+p); if(r.status===401){location.href='/';return;} const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d?.error?.message||'錯誤'); return d; }
+    async function jpost(p){ const r=await fetch('/api'+p,{method:'POST'}); if(r.status===401){location.href='/';return;} const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d?.error?.message||'錯誤'); return d; }
+
+    let chart;
+    function render(s) {
+      const rag = s.e2.rag, norag = s.e2.no_rag;
+      document.getElementById('ragRatio').textContent = pct(rag.unsupported_ratio||0);
+      document.getElementById('noragRatio').textContent = pct(norag.unsupported_ratio||0);
+      document.getElementById('ragDetail').textContent = `原因 ${rag.n_claims} 點：附來源 ${rag.n_cited}、推測 ${rag.n_speculation}、未標示 ${rag.n_unsupported}`;
+      document.getElementById('noragDetail').textContent = `原因 ${norag.n_claims} 點：附來源 ${norag.n_cited}、推測 ${norag.n_speculation}、未標示 ${norag.n_unsupported}`;
+      const hasData = (rag.n_claims + norag.n_claims) > 0;
+      document.getElementById('e2note').textContent = hasData ? '' : '尚無資料，請先按「重跑評估」（需已 seed 旗標，建議啟用 Gemini）。';
+      chart?.destroy();
+      chart = new Chart(document.getElementById('chart'), {
+        type:'bar',
+        data:{ labels:['有 RAG（本系統）','沒有 RAG（直接問）'],
+          datasets:[{ label:'無根據陳述比例', data:[(rag.unsupported_ratio||0)*100,(norag.unsupported_ratio||0)*100],
+            backgroundColor:['#2e9e63','#d8503a'] }] },
+        options:{ indexAxis:'y', plugins:{legend:{display:false}},
+          scales:{ x:{ min:0, max:100, ticks:{ callback:(v)=>v+'%' } } } }
+      });
+      const e1 = s.e1 || {};
+      document.getElementById('e1Ratio').textContent = pct(e1.explainable_ratio||0);
+      document.getElementById('e1Detail').textContent = `可解釋 ${e1['可解釋']||0}、找不到 ${e1['找不到']||0}`;
+    }
+
+    document.getElementById('runBtn').onclick = async () => {
+      const b=document.getElementById('runBtn'); b.disabled=true; b.textContent='評估中…（呼叫 LLM）';
+      try { await jpost('/eval/run'); render(await jget('/eval/summary')); }
+      catch(ex){ showErr(ex.message); }
+      finally { b.disabled=false; b.textContent='重跑評估'; }
+    };
+    document.getElementById('logout').onclick = async (e)=>{ e.preventDefault(); try{ await jpost('/auth/logout'); } finally { location.href='/'; } };
+    (async function(){ try{ await jget('/auth/me'); render(await jget('/eval/summary')); }catch(ex){ location.href='/'; } })();
+  </script>
+</body>
+</html>
