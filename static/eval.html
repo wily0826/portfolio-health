@@ -4,104 +4,121 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>評估實驗</title>
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/report.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
-    .big { font-size:34px; font-weight:700; }
-    .big.good { color:#2e9e63; } .big.bad { color:#d8503a; }
-    .kv { display:flex; gap:24px; flex-wrap:wrap; }
-    .kv > div { flex:1; min-width:200px; }
-    .note { color:#6b7686; font-size:13px; }
+    .headrow{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;}
+    .big{font-family:"IBM Plex Sans",sans-serif; font-variant-numeric:tabular-nums; font-size:44px; font-weight:700; line-height:1;}
+    .big.good{color:var(--accent);} .big.bad{color:var(--high-strong);}
+    .kv{display:grid; grid-template-columns:1fr 1fr; gap:28px; margin-top:20px;}
+    .kv .cap{font-size:14px; color:var(--muted); margin-bottom:8px;}
+    .kv .det{font-size:13px; color:var(--muted); margin-top:8px;}
+    .cwrap{position:relative; height:150px; margin-top:18px;}
+    .how{list-style:none;}
+    .how li{position:relative; padding-left:18px; margin:8px 0; font-size:14px; color:var(--muted); max-width:72ch;}
+    .how li::before{content:""; position:absolute; left:0; top:10px; width:5px; height:5px; border-radius:50%; background:var(--accent);}
+    @media (max-width:600px){ .kv{grid-template-columns:1fr; gap:18px;} }
   </style>
 </head>
 <body>
-  <div class="topbar">
-    <h1>評估實驗（RAG 的價值）</h1>
-    <div><a href="/radar">財報變動雷達</a> &nbsp; <a href="/dashboard">儀表板</a> &nbsp; <a href="#" id="logout">登出</a></div>
-  </div>
+  <div class="wrap">
+    <header class="rpt">
+      <h1>評估實驗</h1>
+      <nav class="nav">
+        <a href="/dashboard">體檢報告</a>
+        <a href="/radar">財報雷達</a>
+        <a href="/eval" class="active">評估實驗</a>
+        <a href="#" id="logout" class="logout">登出</a>
+      </nav>
+    </header>
 
-  <div class="container">
-    <div id="err" class="error-box hidden" style="margin-bottom:16px"></div>
+    <div id="err" class="notice hidden"></div>
 
-    <div class="card">
-      <div class="row" style="justify-content:space-between;align-items:center">
+    <section>
+      <div class="headrow">
         <div>
-          <h2 style="margin:0">E-2 引用忠實度：有 RAG vs 沒有 RAG</h2>
-          <p class="note" style="margin:4px 0 0">同一批旗標各產生兩版解讀，統計「可能原因」中<strong>未標示來源也未標註推測</strong>的斷言比例。比例越低越好。</p>
+          <h2 class="sec" style="margin:0">E-2 引用忠實度：有 RAG vs 沒有 RAG</h2>
+          <p class="lead" style="margin:6px 0 0">同一批旗標各產生兩版解讀，統計「可能原因」中<strong>未標示來源也未標註推測</strong>的斷言比例。比例越低越好。</p>
         </div>
-        <button id="runBtn" style="max-width:200px">重跑評估</button>
+        <button class="btn" id="runBtn">重跑評估</button>
       </div>
-      <div class="kv" style="margin-top:16px">
+      <div class="kv">
         <div>
-          <div class="note">有 RAG（本系統，強制引用）</div>
-          <div class="big good" id="ragRatio">—</div>
-          <div class="note" id="ragDetail"></div>
+          <div class="cap">有 RAG（本系統，強制引用）</div>
+          <div class="big good num" id="ragRatio">—</div>
+          <div class="det" id="ragDetail"></div>
         </div>
         <div>
-          <div class="note">沒有 RAG（直接問 LLM）</div>
-          <div class="big bad" id="noragRatio">—</div>
-          <div class="note" id="noragDetail"></div>
+          <div class="cap">沒有 RAG（直接問 LLM）</div>
+          <div class="big bad num" id="noragRatio">—</div>
+          <div class="det" id="noragDetail"></div>
         </div>
       </div>
-      <canvas id="chart" height="90" style="margin-top:12px"></canvas>
-      <p class="note" id="e2note" style="margin-top:10px"></p>
-    </div>
+      <div class="cwrap"><canvas id="chart"></canvas></div>
+      <p class="hint" id="e2note" style="margin-top:12px"></p>
+    </section>
 
-    <div class="card">
-      <h2 style="margin:0 0 6px">E-1 規則合理性：可解釋比例</h2>
-      <p class="note" style="margin:0 0 10px">嚴重度最高的旗標中，RAG 解讀能附上來源說明的比例。</p>
-      <div class="big" id="e1Ratio">—</div>
-      <div class="note" id="e1Detail"></div>
-      <p class="note" id="e1note" style="margin-top:8px"></p>
-    </div>
+    <section>
+      <h2 class="sec" style="font-size:20px">E-1 規則合理性：可解釋比例</h2>
+      <p class="lead">嚴重度最高的旗標中，RAG 解讀能附上來源說明的比例。</p>
+      <div class="big num" id="e1Ratio">—</div>
+      <div class="det" id="e1Detail" style="color:var(--muted); font-size:13px; margin-top:8px"></div>
+    </section>
 
-    <div class="card">
-      <h2 style="margin:0 0 6px">怎麼解讀</h2>
-      <ul class="note">
-        <li>本頁的「無根據陳述比例」是<strong>引用紀律</strong>的自動、可重現指標：RAG 強制每點附 <code>[n]</code> 或標「（推測）」，故比例趨近 0；沒有 RAG 時 LLM 會講出一堆沒標來源的斷言。</li>
+    <section>
+      <h2 class="sec" style="font-size:20px">怎麼解讀</h2>
+      <ul class="how">
+        <li>「無根據陳述比例」是<strong>引用紀律</strong>的自動、可重現指標：RAG 強制每點附 <code>[n]</code> 或標「（推測）」，故比例趨近 0；沒有 RAG 時 LLM 會講出一堆沒標來源的斷言。</li>
         <li>更細的「支持／部分支持／不支持」由人工在 <code>eval_output/e2_claims.csv</code> 標註後存回 <code>eval_labels</code>（建議找同學互標、比對一致性）。</li>
         <li>E-1 以合成新聞跑時新聞為刻意植入，比例僅在 <code>NEWS_SOURCE=finmind</code> 下具意義。</li>
       </ul>
-    </div>
+    </section>
+    <div style="height:48px"></div>
   </div>
 
   <script>
-    const err = document.getElementById('err');
-    const showErr = (m) => { err.textContent = m; err.classList.remove('hidden'); window.scrollTo(0,0); };
+    const $ = (id) => document.getElementById(id);
+    const err = $('err');
+    const showErr = (m) => { err.className='notice'; err.textContent = m; window.scrollTo(0,0); };
     const pct = (x) => (x*100).toFixed(1) + '%';
     async function jget(p){ const r=await fetch('/api'+p); if(r.status===401){location.href='/';return;} const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d?.error?.message||'錯誤'); return d; }
     async function jpost(p){ const r=await fetch('/api'+p,{method:'POST'}); if(r.status===401){location.href='/';return;} const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d?.error?.message||'錯誤'); return d; }
 
     let chart;
-    function render(s) {
+    function render(s){
       const rag = s.e2.rag, norag = s.e2.no_rag;
-      document.getElementById('ragRatio').textContent = pct(rag.unsupported_ratio||0);
-      document.getElementById('noragRatio').textContent = pct(norag.unsupported_ratio||0);
-      document.getElementById('ragDetail').textContent = `原因 ${rag.n_claims} 點：附來源 ${rag.n_cited}、推測 ${rag.n_speculation}、未標示 ${rag.n_unsupported}`;
-      document.getElementById('noragDetail').textContent = `原因 ${norag.n_claims} 點：附來源 ${norag.n_cited}、推測 ${norag.n_speculation}、未標示 ${norag.n_unsupported}`;
+      $('ragRatio').textContent = pct(rag.unsupported_ratio||0);
+      $('noragRatio').textContent = pct(norag.unsupported_ratio||0);
+      $('ragDetail').textContent = `原因 ${rag.n_claims} 點：附來源 ${rag.n_cited}、推測 ${rag.n_speculation}、未標示 ${rag.n_unsupported}`;
+      $('noragDetail').textContent = `原因 ${norag.n_claims} 點：附來源 ${norag.n_cited}、推測 ${norag.n_speculation}、未標示 ${norag.n_unsupported}`;
       const hasData = (rag.n_claims + norag.n_claims) > 0;
-      document.getElementById('e2note').textContent = hasData ? '' : '尚無資料，請先按「重跑評估」（需已 seed 旗標，建議啟用 Gemini）。';
+      $('e2note').textContent = hasData ? '' : '尚無資料，請先按「重跑評估」（需已 seed 旗標，建議啟用 Gemini）。';
       chart?.destroy();
-      chart = new Chart(document.getElementById('chart'), {
+      chart = new Chart($('chart'), {
         type:'bar',
         data:{ labels:['有 RAG（本系統）','沒有 RAG（直接問）'],
           datasets:[{ label:'無根據陳述比例', data:[(rag.unsupported_ratio||0)*100,(norag.unsupported_ratio||0)*100],
-            backgroundColor:['#2e9e63','#d8503a'] }] },
-        options:{ indexAxis:'y', plugins:{legend:{display:false}},
-          scales:{ x:{ min:0, max:100, ticks:{ callback:(v)=>v+'%' } } } }
+            backgroundColor:['#2A8C9B','#5E1536'], borderRadius:4, barThickness:34 }] },
+        options:{ indexAxis:'y', maintainAspectRatio:false, animation:{duration:500},
+          plugins:{ legend:{display:false} },
+          scales:{ x:{ min:0, max:100, ticks:{ callback:(v)=>v+'%', font:{size:11} }, grid:{color:'#ECEFF0'} },
+            y:{ ticks:{font:{size:12}}, grid:{display:false} } } }
       });
       const e1 = s.e1 || {};
-      document.getElementById('e1Ratio').textContent = pct(e1.explainable_ratio||0);
-      document.getElementById('e1Detail').textContent = `可解釋 ${e1['可解釋']||0}、找不到 ${e1['找不到']||0}`;
+      $('e1Ratio').textContent = pct(e1.explainable_ratio||0);
+      $('e1Detail').textContent = `可解釋 ${e1['可解釋']||0}、找不到 ${e1['找不到']||0}`;
     }
 
-    document.getElementById('runBtn').onclick = async () => {
-      const b=document.getElementById('runBtn'); b.disabled=true; b.textContent='評估中…（呼叫 LLM）';
+    $('runBtn').onclick = async () => {
+      const b=$('runBtn'); b.disabled=true; b.innerHTML='<span class="spin"></span>評估中…（呼叫 LLM）';
       try { await jpost('/eval/run'); render(await jget('/eval/summary')); }
       catch(ex){ showErr(ex.message); }
       finally { b.disabled=false; b.textContent='重跑評估'; }
     };
-    document.getElementById('logout').onclick = async (e)=>{ e.preventDefault(); try{ await jpost('/auth/logout'); } finally { location.href='/'; } };
+    $('logout').onclick = async (e)=>{ e.preventDefault(); try{ await jpost('/auth/logout'); } finally { location.href='/'; } };
     (async function(){ try{ await jget('/auth/me'); render(await jget('/eval/summary')); }catch(ex){ location.href='/'; } })();
   </script>
 </body>

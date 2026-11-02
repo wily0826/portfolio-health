@@ -1,0 +1,97 @@
+/* report.css — 體檢報告式共用設計系統（DESIGN.md 定案，dashboard / radar / eval 共用）
+   色票、字型、tab 導航、按鈕、表單、表格、嚴重度徽章、範圍條、骨架、動態回饋。 */
+:root{
+  --paper:#F6F8F8; --ink:#1E2A30; --rule:#D3DCDD; --accent:#2A8C9B;
+  --low:#3E5F8F; --mid:#B0740F; --high:#7D2650; --high-strong:#5E1536;
+  --low-bg:#CDDAEA; --mid-bg:#EBD6A8; --high-bg:#E6C6D4;
+  --muted:#6A7B82; --field:#fff; --track:#ECEFF0;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+html,body{background:var(--paper); color:var(--ink);}
+body{font-family:"Noto Sans TC",sans-serif; font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased;}
+.num{font-family:"IBM Plex Sans",sans-serif; font-variant-numeric:tabular-nums;}
+a{color:var(--accent); text-decoration:none;} a:hover{text-decoration:underline;}
+button{font-family:inherit; font-size:16px; cursor:pointer;}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+.wrap{max-width:1040px; margin:0 auto; padding:0 24px;}
+.hidden{display:none;}
+.hint{font-size:13px; color:var(--muted);}
+code{font-family:"IBM Plex Sans",monospace; background:var(--track); padding:1px 5px; border-radius:3px; font-size:14px;}
+
+/* 報告抬頭 + tab 導航 */
+header.rpt{border-bottom:2px solid var(--ink); margin-top:28px; padding-bottom:14px;
+  display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap;}
+header.rpt h1{font-size:28px; font-weight:700; letter-spacing:.01em;}
+.nav{display:flex; align-items:center; gap:2px; font-size:15px; flex-wrap:wrap;}
+.nav a{position:relative; padding:7px 13px; color:var(--muted); font-weight:500;}
+.nav a::after{content:""; position:absolute; left:13px; right:13px; bottom:-3px; height:2px; background:var(--accent);
+  transform:scaleX(0); transform-origin:center; transition:transform .22s cubic-bezier(.22,1,.36,1);}
+.nav a:hover{color:var(--ink); text-decoration:none;} .nav a:hover::after{transform:scaleX(1);}
+.nav a.active{color:var(--ink); font-weight:700;} .nav a.active::after{transform:scaleX(1);}
+.nav .who{color:var(--muted); font-size:13px; padding:0 10px; margin-left:6px; border-left:1px solid var(--rule);}
+.nav a.logout{color:var(--muted);} .nav a.logout::after{display:none;} .nav a.logout:hover{color:var(--high);}
+
+section{margin-top:32px;}
+h2.sec{font-size:20px; font-weight:700; margin-bottom:12px;}
+.lead{font-size:14px; color:var(--muted); margin-bottom:14px;}
+
+/* 提示 / 錯誤條 */
+.notice{border:1px solid var(--rule); border-left:3px solid var(--high); background:#fff;
+  padding:12px 16px; font-size:14px; border-radius:3px; margin-bottom:16px;}
+.notice.ok{border-left-color:var(--accent);}
+.notice.hidden{display:none;}
+
+/* 表格（報告式，無卡片陰影） */
+table{width:100%; border-collapse:collapse;}
+thead th{font-size:12px; color:var(--muted); font-weight:500; text-align:left; padding:10px 12px; border-bottom:1px solid var(--rule);}
+tbody td{padding:14px 12px; border-bottom:1px solid var(--rule); font-size:16px; vertical-align:middle;}
+tbody tr:last-child td{border-bottom:none;}
+.ta-r{text-align:right;} th.ta-r{text-align:right;}
+.tscroll{overflow-x:auto;}
+
+/* 按鈕：hover 上浮+陰影、active 下壓 */
+.btn{background:var(--accent); color:#fff; border:none; padding:11px 22px; border-radius:4px; font-weight:500;
+  box-shadow:0 1px 2px rgba(30,42,48,.14);
+  transition:background .16s ease, transform .12s cubic-bezier(.22,1,.36,1), box-shadow .16s ease;}
+.btn:hover{background:#247b89; transform:translateY(-2px); box-shadow:0 7px 18px rgba(42,140,155,.30);}
+.btn:active{transform:translateY(0); box-shadow:0 1px 2px rgba(30,42,48,.14); transition-duration:.05s;}
+.btn:disabled{background:#9DBFC5; cursor:default; transform:none; box-shadow:none;}
+.btn.ghost{background:#fff; color:var(--accent); border:1px solid var(--accent); box-shadow:none;}
+.btn.ghost:hover{background:#EAF4F5; transform:translateY(-2px); box-shadow:0 6px 14px rgba(42,140,155,.18);}
+
+/* 表單：focus 光暈 + label 呼應 */
+.fld{display:flex; flex-direction:column; gap:5px;}
+.fld label{font-size:12px; color:var(--muted); transition:color .15s ease;}
+input,select{font-family:inherit; font-size:16px; padding:10px 12px; border:1px solid var(--rule);
+  border-radius:4px; background:var(--field); color:var(--ink);
+  transition:border-color .15s ease, box-shadow .2s ease, background .15s ease;}
+input::placeholder{color:#AAB6BA;}
+input:hover,select:hover{border-color:#B6C4C6;}
+input:focus,select:focus{border-color:var(--accent); outline:none; background:#fff; box-shadow:0 0 0 3px rgba(42,140,155,.15);}
+.fld:focus-within label{color:var(--accent);}
+
+/* 嚴重度徽章（財報旗標通用，對齊 level 色） */
+.sev{display:inline-block; padding:2px 10px; border-radius:11px; font-size:13px; color:#fff; white-space:nowrap;}
+.sev-極端{background:var(--high-strong);} .sev-顯著{background:var(--mid);} .sev-注意{background:#8A969B;}
+
+/* 參考範圍條 */
+.rbar{position:relative; height:12px; border-radius:6px; display:flex; overflow:visible; background:var(--track);}
+.rbar .z{height:100%;}
+.rbar .z1{background:var(--low-bg); border-radius:6px 0 0 6px;}
+.rbar .z2{background:var(--mid-bg);}
+.rbar .z3{background:var(--high-bg); border-radius:0 6px 6px 0;}
+.rbar .mk{position:absolute; top:-5px; width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent;
+  border-top:9px solid var(--ink); transform:translateX(-50%); transition:left .6s cubic-bezier(.22,1,.36,1);}
+
+/* 骨架 / 轉圈 */
+.sk{background:linear-gradient(90deg,#EDF1F1 25%,#E3E9E9 37%,#EDF1F1 63%); background-size:400% 100%;
+  animation:shim 1.3s ease infinite; border-radius:4px;}
+@keyframes shim{0%{background-position:100% 0;}100%{background-position:0 0;}}
+.spin{display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,.5);
+  border-top-color:#fff; border-radius:50%; animation:sp .7s linear infinite; vertical-align:-2px; margin-right:6px;}
+@keyframes sp{to{transform:rotate(360deg);}}
+
+@media (prefers-reduced-motion: reduce){
+  .rbar .mk{transition:none;} .sk{animation:none;} .spin{animation:none;}
+  .btn,.btn:hover,.btn:active{transform:none; transition:background .16s;} .nav a::after{transition:none;}
+}
