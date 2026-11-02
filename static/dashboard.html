@@ -3,292 +3,475 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>投資組合健檢 — 儀表板</title>
-  <link rel="stylesheet" href="/static/css/style.css">
+  <title>投資組合體檢報告</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
-    .anom-badge { display:inline-block; margin:2px 4px 2px 0; padding:1px 7px; border-radius:10px;
-      font-size:12px; line-height:1.6; color:#fff; white-space:nowrap; }
-    .sev-極端 { background:#c0392b; } .sev-顯著 { background:#e67e22; } .sev-注意 { background:#b7950b; }
-    .anom-none { color:#6b7686; font-size:12px; }
+    :root{
+      --paper:#F6F8F8; --ink:#1E2A30; --rule:#D3DCDD; --accent:#2A8C9B;
+      --low:#4A6FA5; --mid:#C7861A; --high:#8E2C5A;
+      --low-bg:#E4EAF2; --mid-bg:#F3E7CF; --high-bg:#F0E0E8;
+      --muted:#6A7B82; --field:#fff; --track:#ECEFF0;
+    }
+    *{box-sizing:border-box; margin:0; padding:0;}
+    html,body{background:var(--paper); color:var(--ink);}
+    body{font-family:"Noto Sans TC",sans-serif; font-size:16px; line-height:1.6;
+      -webkit-font-smoothing:antialiased;}
+    .num{font-family:"IBM Plex Sans",sans-serif; font-variant-numeric:tabular-nums;}
+    a{color:var(--accent); text-decoration:none;}
+    a:hover{text-decoration:underline;}
+    button{font-family:inherit; font-size:16px; cursor:pointer;}
+    :focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+
+    .wrap{max-width:1040px; margin:0 auto; padding:0 24px;}
+
+    /* 報告抬頭 */
+    header.rpt{border-bottom:2px solid var(--ink); margin-top:28px; padding-bottom:14px;
+      display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap;}
+    header.rpt h1{font-size:28px; font-weight:700; letter-spacing:.01em;}
+    header.rpt .meta{font-size:14px; color:var(--muted); text-align:right;}
+    header.rpt .meta a{margin-left:12px;}
+
+    section{margin-top:32px;}
+    h2.sec{font-size:20px; font-weight:700; margin-bottom:12px;}
+    .lead{font-size:14px; color:var(--muted); margin-bottom:14px;}
+
+    /* 錯誤 / 提示 */
+    .notice{border:1px solid var(--rule); border-left:3px solid var(--high); background:#fff;
+      padding:12px 16px; font-size:14px; border-radius:3px; margin-bottom:16px;}
+    .notice.hidden{display:none;}
+    .hidden{display:none;}
+
+    /* 持股表 */
+    table{width:100%; border-collapse:collapse;}
+    thead th{font-size:12px; color:var(--muted); font-weight:500; text-align:left;
+      padding:10px 12px; border-bottom:1px solid var(--rule);}
+    tbody td{padding:14px 12px; border-bottom:1px solid var(--rule); font-size:16px; vertical-align:middle;}
+    tbody tr:last-child td{border-bottom:none;}
+    .ta-r{text-align:right;} th.ta-r{text-align:right;}
+    .sym{font-weight:600;} .sub{font-size:12px; color:var(--muted);}
+    .st{font-size:12px; padding:2px 9px; border-radius:10px; background:var(--track); color:var(--ink);}
+    .st.ready{background:var(--low-bg); color:var(--low);}
+    .st.insufficient,.st.error{background:var(--high-bg); color:var(--high);}
+    .badge{display:inline-block; margin:1px 4px 1px 0; padding:1px 8px; border-radius:10px;
+      font-size:12px; color:#fff; white-space:nowrap;}
+    .b-極端{background:var(--high);} .b-顯著{background:var(--mid);} .b-注意{background:#9AA7AC;}
+    .b-none{color:var(--muted); font-size:13px;}
+    .lnk-btn{background:none; border:none; color:var(--high); font-size:14px; padding:4px;}
+    .lnk-btn:hover{text-decoration:underline;}
+
+    /* 新增持股 */
+    .addrow{display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; margin-top:18px;}
+    .addrow .fld{display:flex; flex-direction:column; gap:5px;}
+    .addrow label{font-size:12px; color:var(--muted);}
+    .addrow input{font-family:inherit; font-size:16px; padding:9px 11px; border:1px solid var(--rule);
+      border-radius:3px; background:var(--field); width:180px;}
+    .addrow input:focus{border-color:var(--accent); outline:none;}
+    .btn{background:var(--accent); color:#fff; border:none; padding:10px 20px; border-radius:3px; font-weight:500;}
+    .btn:hover{background:#247b89;}
+    .btn:disabled{background:#9DBFC5; cursor:default;}
+    .btn.ghost{background:#fff; color:var(--accent); border:1px solid var(--accent);}
+    .btn.ghost:hover{background:#EAF4F5;}
+    .hint{font-size:13px; color:var(--muted);}
+    code{font-family:"IBM Plex Sans",monospace; background:var(--track); padding:1px 5px; border-radius:3px; font-size:14px;}
+
+    /* 產生健檢列 */
+    .runbar{display:flex; justify-content:space-between; align-items:center; gap:16px;
+      border:1px solid var(--rule); background:#fff; padding:18px 22px; border-radius:4px; flex-wrap:wrap;}
+    .spin{display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,.5);
+      border-top-color:#fff; border-radius:50%; animation:sp .7s linear infinite; vertical-align:-2px; margin-right:6px;}
+    @keyframes sp{to{transform:rotate(360deg);}}
+
+    /* ===== 結果：報告式版面 ===== */
+    .report-head{display:flex; justify-content:space-between; align-items:center; gap:16px;
+      border-bottom:2px solid var(--ink); padding-bottom:12px; margin-bottom:0; flex-wrap:wrap;}
+    .report-head h2{font-size:20px; font-weight:700;}
+    .report-head .asof{font-size:13px; color:var(--muted);}
+
+    .cols{display:grid; grid-template-columns:320px 1fr; gap:36px; margin-top:24px; align-items:start;}
+
+    /* 左：總評 */
+    .verdict .label{font-size:14px; color:var(--muted);}
+    .verdict .score{font-size:40px; font-weight:700; line-height:1; margin-top:2px;}
+    .verdict .grade{font-size:16px; margin-top:8px;}
+    .verdict .grade b.g-低{color:var(--low);} .verdict .grade b.g-中{color:var(--mid);} .verdict .grade b.g-高{color:var(--high);}
+    .verdict .say{font-size:16px; line-height:1.7; margin-top:14px; color:var(--ink);}
+    .verdict .say b{font-weight:700;}
+    .pies{margin-top:26px; display:flex; flex-direction:column; gap:22px;}
+    .pie-box h3{font-size:14px; color:var(--muted); font-weight:500; margin-bottom:8px;}
+    .chart-empty{font-size:13px; color:var(--muted);}
+    .cwrap{position:relative; height:190px;}
+    .tscroll{overflow-x:auto;}
+
+    /* 範圍條 */
+    .rbar{position:relative; height:12px; border-radius:6px; display:flex; overflow:visible; background:var(--track);}
+    .rbar .z{height:100%;}
+    .rbar .z1{background:var(--low-bg); border-radius:6px 0 0 6px;}
+    .rbar .z2{background:var(--mid-bg);}
+    .rbar .z3{background:var(--high-bg); border-radius:0 6px 6px 0;}
+    .rbar .mk{position:absolute; top:-5px; width:0; height:0; border-left:6px solid transparent;
+      border-right:6px solid transparent; border-top:9px solid var(--ink); transform:translateX(-50%);
+      transition:left .6s cubic-bezier(.22,1,.36,1);}
+    .vscale{display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:7px;}
+
+    /* 右：檢驗項目表 */
+    .exam{border:1px solid var(--rule); border-radius:4px; background:#fff; overflow:hidden;}
+    .exam .eh,.exam .er{display:grid; grid-template-columns:118px 88px 1fr 60px; align-items:center; gap:18px;}
+    .exam .eh{padding:11px 20px; font-size:12px; color:var(--muted); background:var(--paper); border-bottom:1px solid var(--rule);}
+    .exam .eh .c2,.exam .eh .c4{text-align:right;}
+    .exam .er{padding:18px 20px; border-bottom:1px solid var(--rule);}
+    .exam .er:last-child{border-bottom:none;}
+    .exam .name{font-size:16px;} .exam .name .sub{display:block;}
+    .exam .val{font-size:20px; font-weight:600; text-align:right;}
+    .exam .judge{font-size:14px; font-weight:700; text-align:right;}
+    .j-低{color:var(--low);} .j-中{color:var(--mid);} .j-高{color:var(--high);}
+
+    /* AI 判讀 */
+    .ai{margin-top:34px; border-top:1px solid var(--rule); padding-top:22px;}
+    .ai .srctag{font-size:12px; color:var(--muted); font-weight:400;}
+    .ai h2{font-size:16px; font-weight:700; margin:18px 0 6px;}
+    .ai p{margin:8px 0; max-width:70ch;}
+    .ai ul{margin:8px 0 8px 2px; list-style:none;}
+    .ai li{padding-left:18px; position:relative; margin:5px 0; max-width:70ch;}
+    .ai li::before{content:""; position:absolute; left:0; top:11px; width:5px; height:5px; border-radius:50%; background:var(--accent);}
+    .disclaimer{font-size:13px; color:var(--muted); margin-top:16px; border-top:1px solid var(--rule); padding-top:12px;}
+
+    .curve{margin-top:34px;}
+
+    /* 骨架 */
+    .sk{background:linear-gradient(90deg,#EDF1F1 25%,#E3E9E9 37%,#EDF1F1 63%); background-size:400% 100%;
+      animation:shim 1.3s ease infinite; border-radius:4px;}
+    @keyframes shim{0%{background-position:100% 0;}100%{background-position:0 0;}}
+
+    @media (prefers-reduced-motion: reduce){
+      .rbar .mk{transition:none;} .sk{animation:none;} .spin{animation:none;}
+    }
+    @media (max-width:760px){
+      .cols{grid-template-columns:1fr; gap:26px;}
+      .exam .eh{display:none;}
+      .exam .er{grid-template-columns:1fr auto; grid-template-areas:"name val" "bar bar" "judge judge"; gap:8px 12px; row-gap:10px;}
+      .exam .name{grid-area:name;} .exam .val{grid-area:val;}
+      .exam .er .barcell{grid-area:bar;} .exam .judge{grid-area:judge; text-align:left;}
+      .addrow input{width:100%;} .addrow .fld{width:100%;}
+      #holdingsTbl{min-width:600px;}
+    }
   </style>
 </head>
 <body>
-  <div class="topbar">
-    <h1>AI 投資組合健檢系統</h1>
-    <div><span class="user" id="who"></span> &nbsp;
-      <a href="/radar">財報變動雷達</a> &nbsp; <a href="#" id="logout">登出</a></div>
-  </div>
+  <div class="wrap">
+    <header class="rpt">
+      <h1>投資組合體檢報告</h1>
+      <div class="meta">
+        <span id="who"></span>
+        <a href="/radar">財報變動雷達</a><a href="#" id="logout">登出</a>
+      </div>
+    </header>
 
-  <div class="container">
-    <div id="err" class="error-box hidden" style="margin-bottom:16px"></div>
+    <div id="err" class="notice hidden"></div>
 
     <!-- 持股管理 -->
-    <div class="card">
-      <h2>持股管理</h2>
-      <p class="hint" id="asof"></p>
-      <table id="holdingsTbl">
+    <section>
+      <h2 class="sec">持股清單</h2>
+      <div class="tscroll"><table id="holdingsTbl">
         <thead><tr>
-          <th>代號 / 名稱</th><th>產業</th><th>股數</th><th>最新價</th><th>市值</th><th>狀態</th><th>財報變動</th><th></th>
+          <th>代號 / 名稱</th><th>產業</th><th class="ta-r">股數</th><th class="ta-r">最新價</th>
+          <th class="ta-r">市值</th><th>狀態</th><th>財報變動</th><th></th>
         </tr></thead>
         <tbody></tbody>
-      </table>
-      <p id="noHold" class="hint hidden">尚未新增持股。試著加入 2330.TW、2317.TW、2412.TW 來體驗健檢。</p>
+      </table></div>
+      <p id="noHold" class="hint hidden" style="margin-top:14px">還沒有持股。在下方加入 2330.TW、2317.TW、2412.TW 就能開始體檢。</p>
 
-      <h2 style="margin-top:22px">新增持股</h2>
-      <div class="row">
-        <div><label>股票代號（例：2330.TW）</label><input id="f_symbol" placeholder="2330.TW"></div>
-        <div><label>股數</label><input id="f_shares" type="number" min="0" step="0.000001" placeholder="1000"></div>
-        <div><label>平均成本（選填）</label><input id="f_cost" type="number" min="0" step="0.0001"></div>
-        <button id="addBtn">新增</button>
+      <div class="addrow">
+        <div class="fld"><label for="f_symbol">股票代號</label><input id="f_symbol" placeholder="2330.TW"></div>
+        <div class="fld"><label for="f_shares">股數</label><input id="f_shares" type="number" min="0" step="0.000001" placeholder="1000"></div>
+        <div class="fld"><label for="f_cost">平均成本（選填）</label><input id="f_cost" type="number" min="0" step="0.0001"></div>
+        <button class="btn" id="addBtn">新增持股</button>
       </div>
-      <p class="hint" style="margin-bottom:0">MVP 僅支援台股。上市加 <code>.TW</code>、上櫃加 <code>.TWO</code>。</p>
-    </div>
+      <p class="hint" style="margin-top:8px">僅支援台股。上市加 <code>.TW</code>、上櫃加 <code>.TWO</code>。</p>
+    </section>
 
     <!-- 產生健檢 -->
-    <div class="card">
-      <div class="row" style="justify-content:space-between;align-items:center">
-        <div><h2 style="margin:0">風險健檢</h2><p class="hint" style="margin:4px 0 0">所有持股狀態為「可計算」時才能產生健檢。</p></div>
-        <button id="runBtn" style="max-width:220px">產生健檢</button>
+    <section>
+      <div class="runbar">
+        <div><strong style="font-size:16px">風險健檢</strong>
+          <span class="hint" id="runMsg" style="margin-left:10px"></span></div>
+        <button class="btn" id="runBtn">產生健檢報告</button>
       </div>
-      <p id="runMsg" class="hint hidden" style="margin-top:12px"></p>
-    </div>
+    </section>
 
     <!-- 結果 -->
-    <div id="results" class="hidden">
-      <div class="card">
-        <h2>風險評分</h2>
-        <div class="score-hero">
-          <div style="text-align:center">
-            <div class="score-num" id="scoreNum">—</div>
-            <span class="level-pill" id="levelPill">—</span>
+    <section id="results" class="hidden">
+      <div class="report-head">
+        <h2>體檢結果</h2>
+        <span class="asof" id="asof2"></span>
+      </div>
+      <div class="cols">
+        <!-- 左：總評 -->
+        <div class="verdict">
+          <div class="label">風險分數</div>
+          <div class="score num" id="scoreNum">—</div>
+          <div class="grade">等級：<b id="gradeTxt">—</b></div>
+          <div class="score-bar" style="margin-top:14px">
+            <div class="rbar"><span class="z z1" style="flex:0 0 30%"></span><span class="z z2" style="flex:0 0 30%"></span><span class="z z3" style="flex:0 0 40%"></span><span class="mk" id="scoreMk" style="left:0"></span></div>
+            <div class="vscale"><span>低</span><span>中</span><span>高</span></div>
           </div>
-          <div class="subbars" id="subbars"></div>
+          <p class="say" id="verdictSay"></p>
+          <div class="pies">
+            <div class="pie-box"><h3>持股配置</h3><div class="cwrap"><canvas id="pieHold"></canvas></div><p id="pieHoldEmpty" class="chart-empty hidden">無資料</p></div>
+            <div class="pie-box"><h3>產業配置</h3><div class="cwrap"><canvas id="pieSector"></canvas></div><p id="pieSectorEmpty" class="chart-empty hidden">無資料</p></div>
+          </div>
         </div>
-        <p class="hint" style="margin-bottom:0">分數為 0–100 的<strong>啟發式</strong>指標（非學術標準），由五項風險特徵線性加權，門檻與權重可於 <code>SCORE_CONFIG</code> 調整。</p>
+
+        <!-- 右：檢驗項目 -->
+        <div>
+          <div class="exam">
+            <div class="eh"><span>檢驗項目</span><span class="c2">數值</span><span>參考範圍（正常 ｜ 留意 ｜ 偏高）</span><span class="c4">判讀</span></div>
+            <div id="examRows"></div>
+          </div>
+          <p class="hint" style="margin-top:10px">三段範圍條標出數值落在「正常 / 留意 / 偏高」哪一段。分數為 0–100 啟發式指標，非學術標準。</p>
+        </div>
       </div>
 
-      <div class="grid grid-5" id="metrics"></div>
-
-      <div class="grid grid-2">
-        <div class="card"><h2>持股配置</h2><canvas id="pieHold"></canvas><p id="pieHoldEmpty" class="chart-empty hidden">無資料</p></div>
-        <div class="card"><h2>產業配置</h2><canvas id="pieSector"></canvas><p id="pieSectorEmpty" class="chart-empty hidden">無資料</p></div>
+      <!-- 累積報酬 -->
+      <div class="curve">
+        <h2 class="sec" style="font-size:16px">累積報酬曲線<span class="hint" style="font-weight:400;margin-left:8px">以目前權重回溯、固定權重每日再平衡</span></h2>
+        <canvas id="lineCurve" height="96"></canvas>
       </div>
 
-      <div class="card">
-        <h2>累積報酬曲線（以目前權重回溯，固定權重、每日再平衡）</h2>
-        <canvas id="lineCurve" height="110"></canvas>
-      </div>
-
-      <div class="card report">
-        <h2 style="display:flex;justify-content:space-between">AI 健檢報告 <span class="source-tag" id="srcTag"></span></h2>
+      <!-- AI 判讀 -->
+      <div class="ai">
+        <h2 class="sec" style="font-size:20px;display:flex;justify-content:space-between;align-items:baseline">AI 判讀 <span class="srctag" id="srcTag"></span></h2>
         <div id="reportBody"></div>
       </div>
-    </div>
+    </section>
+
+    <!-- 骨架（健檢中顯示） -->
+    <section id="skel" class="hidden">
+      <div class="report-head"><h2>體檢中…</h2><span class="asof" id="skStep">正在分析歷史資料</span></div>
+      <div class="cols">
+        <div><div class="sk" style="height:14px;width:60px;margin-top:4px"></div><div class="sk" style="height:40px;width:90px;margin-top:10px"></div><div class="sk" style="height:12px;width:100%;margin-top:20px"></div><div class="sk" style="height:60px;width:100%;margin-top:22px"></div><div class="sk" style="height:150px;width:100%;margin-top:22px"></div></div>
+        <div class="exam">
+          <div class="er" style="display:block"><div class="sk" style="height:18px;width:100%"></div></div>
+          <div class="er" style="display:block"><div class="sk" style="height:18px;width:100%"></div></div>
+          <div class="er" style="display:block"><div class="sk" style="height:18px;width:100%"></div></div>
+          <div class="er" style="display:block"><div class="sk" style="height:18px;width:100%"></div></div>
+          <div class="er" style="display:block"><div class="sk" style="height:18px;width:100%"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <div style="height:48px"></div>
   </div>
 
   <script>
-    const err = document.getElementById('err');
+    const $ = (id) => document.getElementById(id);
+    const err = $('err');
     const showErr = (m) => { err.textContent = m; err.classList.remove('hidden'); window.scrollTo(0,0); };
     const hideErr = () => err.classList.add('hidden');
 
-    // 與 style.css 一致的類別色盤（色盲友善、明暗皆可讀）
-    const PALETTE = ['#2f6df6','#2e9e63','#e0a526','#8b5cf6','#d8503a','#17a2b8','#e06fae','#6b7686','#3fae8f','#c2693a'];
+    // 圖表色盤：品牌藍綠 + 風險三色 + 中性，色盲友善、避開紅綠（台股紅漲綠跌保留給股價）
+    const PIE = ['#2A8C9B','#4A6FA5','#C7861A','#8E2C5A','#5B9AA6','#86A0C4','#B8B2A0','#9AA7AC'];
+    const fmtPct = (x) => (x * 100).toFixed(1) + '%';
 
-    async function jget(path) {
+    async function jget(path){
       const r = await fetch('/api' + path);
-      if (r.status === 401) { location.href = '/'; return; }
+      if (r.status === 401){ location.href = '/'; return; }
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d?.error?.message || '發生錯誤');
       return d;
     }
-    async function jsend(method, path, body) {
-      const r = await fetch('/api' + path, {
-        method, headers: body ? { 'Content-Type': 'application/json' } : {},
-        body: body ? JSON.stringify(body) : undefined
-      });
-      if (r.status === 401) { location.href = '/'; return; }
+    async function jsend(method, path, body){
+      const r = await fetch('/api' + path, { method,
+        headers: body ? { 'Content-Type':'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+      if (r.status === 401){ location.href = '/'; return; }
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        const e = new Error(d?.error?.message || '發生錯誤');
-        e.details = d?.error?.details; throw e;
-      }
+      if (!r.ok){ const e = new Error(d?.error?.message || '發生錯誤'); e.details = d?.error?.details; throw e; }
       return d;
     }
 
-    const fmtPct = (x) => (x * 100).toFixed(1) + '%';
-    const STATUS_LABEL = { ready: ['可計算','ready'], loading: ['準備中','loading'], insufficient: ['資料不足','insufficient'], error: ['錯誤','error'] };
-
-    // 財報變動旗標的短標籤（儀表板徽章用）
-    const RULE_SHORT = { 'R-REV-YOY':'月營收', 'R-GM-SHIFT':'毛利率', 'R-AR-DIV':'應收', 'R-INV-DIV':'存貨', 'R-ACCRUAL':'現金流' };
-    function alertBadges(list) {
-      if (!list || !list.length) return '<span class="anom-none">—</span>';
-      return list.map(a => `<span class="anom-badge sev-${a.severity}" title="${a.rule}（${a.period}）">${RULE_SHORT[a.rule_id]||a.rule_id}·${a.severity}</span>`).join('');
+    const STATUS_LABEL = { ready:['可計算','ready'], loading:['準備中','loading'], insufficient:['資料不足','insufficient'], error:['錯誤','error'] };
+    const RULE_SHORT = { 'R-REV-YOY':'月營收','R-GM-SHIFT':'毛利率','R-AR-DIV':'應收','R-INV-DIV':'存貨','R-ACCRUAL':'現金流' };
+    function alertBadges(list){
+      if (!list || !list.length) return '<span class="b-none">—</span>';
+      return list.map(a => `<span class="badge b-${a.severity}" title="${a.rule}（${a.period}）">${RULE_SHORT[a.rule_id]||a.rule_id}·${a.severity}</span>`).join('');
     }
 
     let holdings = [];
-    async function loadHoldings() {
-      const d = await jget('/holdings');
-      holdings = d.items;
-      // 財報變動旗標（容錯：取不到也不影響持股顯示）
+    async function loadHoldings(){
+      const d = await jget('/holdings'); holdings = d.items;
       let alertsBySym = {};
-      try {
-        const al = await jget('/holdings/alerts');
-        for (const a of (al.items||[])) (alertsBySym[a.symbol] ||= []).push(a);
-      } catch (e) { /* 忽略 */ }
-      const tb = document.querySelector('#holdingsTbl tbody');
-      tb.innerHTML = '';
-      document.getElementById('noHold').classList.toggle('hidden', holdings.length > 0);
-      for (const h of holdings) {
+      try { const al = await jget('/holdings/alerts'); for (const a of (al.items||[])) (alertsBySym[a.symbol] ||= []).push(a); } catch(e){}
+      const tb = document.querySelector('#holdingsTbl tbody'); tb.innerHTML = '';
+      $('noHold').classList.toggle('hidden', holdings.length > 0);
+      for (const h of holdings){
         const [label, cls] = STATUS_LABEL[h.status] || STATUS_LABEL.error;
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td><strong>${h.symbol}</strong><br><span class="hint">${h.name||''}</span></td>
+          <td><span class="sym">${h.symbol}</span><br><span class="sub">${h.name||''}</span></td>
           <td>${h.sector||'未分類'}</td>
-          <td>${h.shares}</td>
-          <td>${h.last_close!=null?h.last_close.toLocaleString():'—'}</td>
-          <td>${h.market_value!=null?Math.round(h.market_value).toLocaleString():'—'}</td>
-          <td><span class="badge ${cls}">${label}</span></td>
+          <td class="ta-r num">${h.shares}</td>
+          <td class="ta-r num">${h.last_close!=null?h.last_close.toLocaleString():'—'}</td>
+          <td class="ta-r num">${h.market_value!=null?Math.round(h.market_value).toLocaleString():'—'}</td>
+          <td><span class="st ${cls}">${label}</span></td>
           <td>${alertBadges(alertsBySym[h.symbol])}</td>
-          <td><button class="danger" data-del="${h.id}">刪除</button></td>`;
+          <td class="ta-r"><button class="lnk-btn" data-del="${h.id}">刪除</button></td>`;
         tb.appendChild(tr);
       }
       tb.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
         if (!confirm('確定刪除這筆持股？')) return;
-        try { await jsend('DELETE', '/holdings/' + b.dataset.del); await loadHoldings(); }
-        catch (ex) { showErr(ex.message); }
+        try { await jsend('DELETE', '/holdings/' + b.dataset.del); await loadHoldings(); } catch(ex){ showErr(ex.message); }
       });
       const allReady = holdings.length > 0 && holdings.every(h => h.status === 'ready');
-      document.getElementById('runBtn').disabled = !allReady;
-      document.getElementById('runMsg').classList.toggle('hidden', allReady);
-      if (!allReady) {
+      $('runBtn').disabled = !allReady;
+      if (allReady){ $('runMsg').textContent = ''; }
+      else {
         const bad = holdings.filter(h => h.status !== 'ready').map(h => h.symbol);
-        document.getElementById('runMsg').textContent = holdings.length === 0
-          ? '請先新增至少一檔台股持股。'
-          : '以下股票尚未就緒：' + bad.join('、');
+        $('runMsg').textContent = holdings.length === 0 ? '先新增至少一檔台股持股。'
+          : '這些股票尚未就緒：' + bad.join('、') + '。資料補齊後即可健檢。';
       }
     }
 
-    document.getElementById('addBtn').onclick = async () => {
+    $('addBtn').onclick = async () => {
       hideErr();
-      const symbol = document.getElementById('f_symbol').value.trim();
-      const shares = parseFloat(document.getElementById('f_shares').value);
-      const cost = document.getElementById('f_cost').value;
-      if (!symbol || !(shares > 0)) return showErr('請輸入正確的代號與大於 0 的股數。');
-      const btn = document.getElementById('addBtn');
-      btn.disabled = true; btn.innerHTML = '處理中…';
+      const symbol = $('f_symbol').value.trim();
+      const shares = parseFloat($('f_shares').value);
+      const cost = $('f_cost').value;
+      if (!symbol || !(shares > 0)) return showErr('請輸入正確的代號，以及大於 0 的股數。');
+      const btn = $('addBtn'); btn.disabled = true; btn.textContent = '新增中…';
       try {
         await jsend('POST', '/holdings', { symbol, shares, avg_cost: cost ? parseFloat(cost) : null });
-        document.getElementById('f_symbol').value = '';
-        document.getElementById('f_shares').value = '';
-        document.getElementById('f_cost').value = '';
+        $('f_symbol').value = ''; $('f_shares').value = ''; $('f_cost').value = '';
         await loadHoldings();
-      } catch (ex) { showErr(ex.message); }
-      finally { btn.disabled = false; btn.textContent = '新增'; }
+      } catch(ex){ showErr(ex.message); }
+      finally { btn.disabled = false; btn.textContent = '新增持股'; }
     };
 
+    // ── 圖表（首次繪製才播動畫，之後更新不播）──
     let charts = {};
-    function drawPie(id, emptyId, labels, data) {
+    function drawPie(id, emptyId, labels, data){
       const empty = !labels.length;
-      document.getElementById(emptyId).classList.toggle('hidden', !empty);
-      document.getElementById(id).classList.toggle('hidden', empty);
+      $(emptyId).classList.toggle('hidden', !empty);
+      $(id).classList.toggle('hidden', empty);
       if (empty) return;
-      charts[id]?.destroy();
-      charts[id] = new Chart(document.getElementById(id), {
-        type: 'doughnut',
-        data: { labels, datasets: [{ data, backgroundColor: labels.map((_, i) => PALETTE[i % PALETTE.length]), borderWidth: 0 }] },
-        options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } },
-          tooltip: { callbacks: { label: (c) => `${c.label}：${(c.parsed*100).toFixed(1)}%` } } } }
+      const first = !charts[id]; charts[id]?.destroy();
+      charts[id] = new Chart($(id), {
+        type:'doughnut',
+        data:{ labels, datasets:[{ data, backgroundColor: labels.map((_,i)=>PIE[i%PIE.length]), borderWidth:0 }] },
+        options:{ animation:first?{duration:500}:false, maintainAspectRatio:false, cutout:'62%',
+          plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, font:{ size:12 }, padding:10 } },
+            tooltip:{ callbacks:{ label:(c)=>`${c.label}：${(c.parsed*100).toFixed(1)}%` } } } }
       });
     }
-    function drawLine(dates, values) {
-      charts.line?.destroy();
-      charts.line = new Chart(document.getElementById('lineCurve'), {
-        type: 'line',
-        data: { labels: dates, datasets: [{ data: values, borderColor: PALETTE[0], backgroundColor: 'rgba(47,109,246,.12)',
-          fill: true, pointRadius: 0, borderWidth: 2, tension: .15 }] },
-        options: { plugins: { legend: { display: false },
-            tooltip: { callbacks: { label: (c) => '淨值 ' + c.parsed.y.toFixed(3) } } },
-          scales: { x: { ticks: { maxTicksLimit: 8 } }, y: { ticks: { callback: (v) => v.toFixed(2) } } } }
+    function drawLine(dates, values){
+      const first = !charts.line; charts.line?.destroy();
+      charts.line = new Chart($('lineCurve'), {
+        type:'line',
+        data:{ labels:dates, datasets:[{ data:values, borderColor:'#2A8C9B',
+          backgroundColor:'rgba(42,140,155,.10)', fill:true, pointRadius:0, borderWidth:2, tension:.15 }] },
+        options:{ animation:first?{duration:500}:false,
+          plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:(c)=>'淨值 '+c.parsed.y.toFixed(3) } } },
+          scales:{ x:{ ticks:{ maxTicksLimit:8, font:{ size:11 } }, grid:{ display:false } },
+            y:{ ticks:{ callback:(v)=>v.toFixed(2), font:{ size:11 } }, grid:{ color:'#ECEFF0' } } } }
       });
     }
 
-    const SUB_LABEL = { top1_weight: '單一持股集中', sector_hhi: '產業集中', volatility: '波動度', max_drawdown_abs: '最大回撤', avg_correlation: '相關性' };
+    // ── 範圍條：sub_score(0–100) 定位；40 / 70 為「正常|留意|偏高」分界 ──
+    // 分界對齊後端等級門檻（risk_engine：低<30、中30–60、高≥60）
+    function judgeOf(score){ return score < 30 ? '低' : score < 60 ? '中' : '高'; }
+    const EXAM = [
+      { key:'volatility',      name:'年化波動度', hint:'報酬起伏大小',          fmt:m=>fmtPct(m.volatility) },
+      { key:'max_drawdown_abs',name:'最大回撤',   hint:'從高點跌幅',            fmt:m=>fmtPct(m.max_drawdown) },
+      { key:'top1_weight',     name:'最大單一持股',hint:m=>m.top1_symbol||'',   fmt:m=>fmtPct(m.top1_weight) },
+      { key:'sector_hhi',      name:'產業集中度', hint:'HHI，越高越集中',       fmt:m=>m.sector_hhi.toFixed(3) },
+      { key:'avg_correlation', name:'平均相關係數',hint:'持股同漲同跌程度',      fmt:m=>m.avg_correlation.toFixed(2) },
+    ];
+    const WHY = { top1_weight:'單一持股過度集中', sector_hhi:'產業過度集中', volatility:'波動度偏高',
+      max_drawdown_abs:'報酬回撤偏大', avg_correlation:'持股相關性偏高' };
+    function verdictText(s){
+      const hi = Object.entries(s.sub_scores).filter(([k,v])=>v>=60).sort((a,b)=>b[1]-a[1]);
+      if (!hi.length) return `整體風險<b>${s.level}</b>，各項指標大致均衡，沒有特別突出的風險來源。`;
+      const names = hi.slice(0,2).map(([k])=>WHY[k]);
+      return `整體風險<b>${s.level}</b>，主要來自<b>${names.join('與')}</b>。`;
+    }
 
-    // 極簡 Markdown 渲染（只處理 ## 標題、- 清單、段落），報告內容來自後端，非使用者輸入
-    function renderReport(md) {
-      const esc = (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      const lines = md.split('\n'); let html = '', inUl = false;
-      const closeUl = () => { if (inUl) { html += '</ul>'; inUl = false; } };
-      for (let raw of lines) {
+    // 極簡 Markdown（## 標題、- 清單、段落）；內容來自後端，非使用者輸入
+    function renderReport(md){
+      const esc = (s)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const b = (s)=>s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+      const lines = md.split('\n'); let html='', inUl=false;
+      const closeUl = ()=>{ if(inUl){ html+='</ul>'; inUl=false; } };
+      for (const raw of lines){
         const line = raw.trimEnd();
-        if (line.startsWith('## ')) { closeUl(); html += `<h2>${esc(line.slice(3))}</h2>`; }
-        else if (line.startsWith('- ')) { if (!inUl) { html += '<ul>'; inUl = true; } html += `<li>${esc(line.slice(2)).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')}</li>`; }
-        else if (line.trim() === '') { closeUl(); }
-        else { closeUl(); html += `<p>${esc(line).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')}</p>`; }
+        if (line.startsWith('## ')){ closeUl(); html+=`<h2>${esc(line.slice(3))}</h2>`; }
+        else if (line.startsWith('- ')){ if(!inUl){ html+='<ul>'; inUl=true; } html+=`<li>${b(esc(line.slice(2)))}</li>`; }
+        else if (line.trim()===''){ closeUl(); }
+        else { closeUl(); html+=`<p>${b(esc(line))}</p>`; }
       }
-      closeUl();
-      return html;
+      closeUl(); return html;
     }
 
-    function renderResult(res) {
+    function renderResult(res){
       const m = res.metrics, s = m.score;
-      document.getElementById('results').classList.remove('hidden');
-      document.getElementById('scoreNum').textContent = s.score;
-      const pill = document.getElementById('levelPill');
-      pill.textContent = '風險 ' + s.level; pill.className = 'level-pill level-' + s.level;
+      $('skel').classList.add('hidden');
+      $('results').classList.remove('hidden');
+      $('asof2').textContent = `資料截至 ${m.data_as_of}，觀察 ${m.n_observations} 個交易日`;
 
-      document.getElementById('subbars').innerHTML = Object.entries(s.sub_scores).map(([k, v]) =>
-        `<div class="subbar"><div class="l"><span>${SUB_LABEL[k]||k}</span><span>${v.toFixed(0)}</span></div>
-         <div class="track"><span style="width:${v}%"></span></div></div>`).join('');
+      $('scoreNum').textContent = s.score;
+      const g = $('gradeTxt'); g.textContent = s.level; g.className = 'g-' + s.level;
+      $('verdictSay').innerHTML = verdictText(s);
 
-      const cards = [
-        ['最大單一持股', fmtPct(m.top1_weight) + `<div class="hint">${m.top1_symbol}</div>`],
-        ['產業集中度 HHI', m.sector_hhi.toFixed(3)],
-        ['年化波動度', fmtPct(m.volatility)],
-        ['最大回撤', fmtPct(m.max_drawdown)],
-        ['平均相關係數', m.avg_correlation.toFixed(2)],
-      ];
-      document.getElementById('metrics').innerHTML = cards.map(([k, v]) =>
-        `<div class="card metric"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('');
+      // 檢驗項目表 + 範圍條
+      $('examRows').innerHTML = EXAM.map(e => {
+        const sc = s.sub_scores[e.key]; const j = judgeOf(sc);
+        const hint = typeof e.hint === 'function' ? e.hint(m) : e.hint;
+        return `<div class="er">
+          <span class="name">${e.name}<span class="sub">${hint}</span></span>
+          <span class="val num">${e.fmt(m)}</span>
+          <span class="barcell"><span class="rbar"><span class="z z1" style="flex:0 0 30%"></span><span class="z z2" style="flex:0 0 30%"></span><span class="z z3" style="flex:0 0 40%"></span><span class="mk" data-to="${sc}" style="left:0"></span></span></span>
+          <span class="judge j-${j}">${j==='低'?'正常':j==='中'?'留意':'偏高'}</span>
+        </div>`;
+      }).join('');
 
-      const w = m.weights, sw = m.sector_weights;
-      drawPie('pieHold', 'pieHoldEmpty', Object.keys(w), Object.values(w));
-      drawPie('pieSector', 'pieSectorEmpty', Object.keys(sw), Object.values(sw));
+      // 唯一的進場動畫：範圍條標記滑到定位（下一幀觸發 transition）
+      requestAnimationFrame(() => {
+        $('scoreMk').style.left = Math.max(0, Math.min(100, s.score)) + '%';
+        document.querySelectorAll('#examRows .mk').forEach(mk => {
+          mk.style.left = Math.max(0, Math.min(100, +mk.dataset.to)) + '%';
+        });
+      });
+
+      drawPie('pieHold','pieHoldEmpty', Object.keys(m.weights), Object.values(m.weights));
+      drawPie('pieSector','pieSectorEmpty', Object.keys(m.sector_weights), Object.values(m.sector_weights));
       drawLine(res.curve.dates, res.curve.values);
 
-      document.getElementById('srcTag').textContent =
-        res.report_source === 'llm' ? 'LLM 生成' : '規則式備援（LLM 未啟用或失敗）';
-      document.getElementById('reportBody').innerHTML = renderReport(res.ai_report)
-        + `<p class="hint" style="margin-top:14px">資料截至 ${m.data_as_of}，觀察 ${m.n_observations} 個交易日。</p>`
-        + `<p class="disclaimer">${'本報告僅為依歷史資料計算的風險分析，不構成投資建議，歷史表現不代表未來。'}</p>`;
-      document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+      $('srcTag').textContent = res.report_source === 'llm' ? 'AI 生成' : '規則式備援（AI 未啟用或失敗）';
+      $('reportBody').innerHTML = renderReport(res.ai_report)
+        + `<p class="disclaimer">本報告僅為依歷史資料計算的風險分析，不構成投資建議，歷史表現不代表未來。</p>`;
+      $('results').scrollIntoView({ behavior:'smooth', block:'start' });
     }
 
-    document.getElementById('runBtn').onclick = async () => {
+    $('runBtn').onclick = async () => {
       hideErr();
-      const btn = document.getElementById('runBtn');
-      btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 正在分析歷史資料…';
-      try { renderResult(await jsend('POST', '/reports')); }
-      catch (ex) {
+      const btn = $('runBtn'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>健檢中…';
+      $('results').classList.add('hidden'); $('skel').classList.remove('hidden');
+      $('skel').scrollIntoView({ behavior:'smooth', block:'start' });
+      try { renderResult(await jsend('POST', '/reports')); btn.textContent = '重新健檢'; }
+      catch(ex){
+        $('skel').classList.add('hidden');
         let msg = ex.message;
         if (ex.details?.symbols?.length) msg += '（' + ex.details.symbols.join('、') + '）';
-        showErr(msg);
+        showErr(msg); btn.textContent = '產生健檢報告';
       }
-      finally { btn.disabled = false; btn.textContent = '產生健檢'; loadHoldings(); }
+      finally { btn.disabled = false; loadHoldings(); }
     };
 
-    document.getElementById('logout').onclick = async (e) => {
-      e.preventDefault();
-      try { await jsend('POST', '/auth/logout'); } finally { location.href = '/'; }
-    };
+    $('logout').onclick = async (e) => { e.preventDefault(); try { await jsend('POST','/auth/logout'); } finally { location.href='/'; } };
 
-    (async function init() {
-      try {
-        const me = await jget('/auth/me');
-        document.getElementById('who').textContent = me.display_name;
-        await loadHoldings();
-      } catch (ex) { location.href = '/'; }
+    (async function init(){
+      try { const me = await jget('/auth/me'); $('who').textContent = me.display_name; await loadHoldings(); }
+      catch(ex){ location.href = '/'; }
     })();
   </script>
 </body>
