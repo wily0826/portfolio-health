@@ -71,10 +71,15 @@
     /* 新增持股 */
     .addrow{display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; margin-top:18px;}
     .addrow .fld{display:flex; flex-direction:column; gap:5px;}
-    .addrow label{font-size:12px; color:var(--muted);}
-    .addrow input{font-family:inherit; font-size:16px; padding:9px 11px; border:1px solid var(--rule);
-      border-radius:3px; background:var(--field); width:180px;}
-    .addrow input:focus{border-color:var(--accent); outline:none;}
+    .addrow label{font-size:12px; color:var(--muted); transition:color .15s ease;}
+    .addrow input{font-family:inherit; font-size:16px; padding:10px 12px; border:1px solid var(--rule);
+      border-radius:4px; background:var(--field); width:180px;
+      transition:border-color .15s ease, box-shadow .2s ease, background .15s ease;}
+    .addrow input::placeholder{color:#AAB6BA;}
+    .addrow input:hover{border-color:#B6C4C6;}
+    .addrow input:focus{border-color:var(--accent); outline:none; background:#fff;
+      box-shadow:0 0 0 3px rgba(42,140,155,.15);}
+    .addrow .fld:focus-within label{color:var(--accent);}
     .btn{background:var(--accent); color:#fff; border:none; padding:11px 22px; border-radius:4px; font-weight:500;
       box-shadow:0 1px 2px rgba(30,42,48,.14);
       transition:background .16s ease, transform .12s cubic-bezier(.22,1,.36,1), box-shadow .16s ease;}
