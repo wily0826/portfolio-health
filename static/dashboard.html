@@ -11,8 +11,8 @@
   <style>
     :root{
       --paper:#F6F8F8; --ink:#1E2A30; --rule:#D3DCDD; --accent:#2A8C9B;
-      --low:#4A6FA5; --mid:#C7861A; --high:#8E2C5A;
-      --low-bg:#E4EAF2; --mid-bg:#F3E7CF; --high-bg:#F0E0E8;
+      --low:#3E5F8F; --mid:#B0740F; --high:#7D2650; --high-strong:#5E1536;
+      --low-bg:#CDDAEA; --mid-bg:#EBD6A8; --high-bg:#E6C6D4;
       --muted:#6A7B82; --field:#fff; --track:#ECEFF0;
     }
     *{box-sizing:border-box; margin:0; padding:0;}
@@ -31,8 +31,14 @@
     header.rpt{border-bottom:2px solid var(--ink); margin-top:28px; padding-bottom:14px;
       display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap;}
     header.rpt h1{font-size:28px; font-weight:700; letter-spacing:.01em;}
-    header.rpt .meta{font-size:14px; color:var(--muted); text-align:right;}
-    header.rpt .meta a{margin-left:12px;}
+    header.rpt .nav{display:flex; align-items:center; gap:2px; font-size:15px; flex-wrap:wrap;}
+    .nav a{position:relative; padding:7px 13px; color:var(--muted); font-weight:500;}
+    .nav a::after{content:""; position:absolute; left:13px; right:13px; bottom:-3px; height:2px; background:var(--accent);
+      transform:scaleX(0); transform-origin:center; transition:transform .22s cubic-bezier(.22,1,.36,1);}
+    .nav a:hover{color:var(--ink); text-decoration:none;} .nav a:hover::after{transform:scaleX(1);}
+    .nav a.active{color:var(--ink); font-weight:700;} .nav a.active::after{transform:scaleX(1);}
+    .nav .who{color:var(--muted); font-size:13px; padding:0 10px; margin-left:6px; border-left:1px solid var(--rule);}
+    .nav a.logout{color:var(--muted);} .nav a.logout::after{display:none;} .nav a.logout:hover{color:var(--high);}
 
     section{margin-top:32px;}
     h2.sec{font-size:20px; font-weight:700; margin-bottom:12px;}
@@ -69,11 +75,14 @@
     .addrow input{font-family:inherit; font-size:16px; padding:9px 11px; border:1px solid var(--rule);
       border-radius:3px; background:var(--field); width:180px;}
     .addrow input:focus{border-color:var(--accent); outline:none;}
-    .btn{background:var(--accent); color:#fff; border:none; padding:10px 20px; border-radius:3px; font-weight:500;}
-    .btn:hover{background:#247b89;}
-    .btn:disabled{background:#9DBFC5; cursor:default;}
-    .btn.ghost{background:#fff; color:var(--accent); border:1px solid var(--accent);}
-    .btn.ghost:hover{background:#EAF4F5;}
+    .btn{background:var(--accent); color:#fff; border:none; padding:11px 22px; border-radius:4px; font-weight:500;
+      box-shadow:0 1px 2px rgba(30,42,48,.14);
+      transition:background .16s ease, transform .12s cubic-bezier(.22,1,.36,1), box-shadow .16s ease;}
+    .btn:hover{background:#247b89; transform:translateY(-2px); box-shadow:0 7px 18px rgba(42,140,155,.30);}
+    .btn:active{transform:translateY(0); box-shadow:0 1px 2px rgba(30,42,48,.14); transition-duration:.05s;}
+    .btn:disabled{background:#9DBFC5; cursor:default; transform:none; box-shadow:none;}
+    .btn.ghost{background:#fff; color:var(--accent); border:1px solid var(--accent); box-shadow:none;}
+    .btn.ghost:hover{background:#EAF4F5; transform:translateY(-2px); box-shadow:0 6px 14px rgba(42,140,155,.18);}
     .hint{font-size:13px; color:var(--muted);}
     code{font-family:"IBM Plex Sans",monospace; background:var(--track); padding:1px 5px; border-radius:3px; font-size:14px;}
 
@@ -126,7 +135,7 @@
     .exam .name{font-size:16px;} .exam .name .sub{display:block;}
     .exam .val{font-size:20px; font-weight:600; text-align:right;}
     .exam .judge{font-size:14px; font-weight:700; text-align:right;}
-    .j-低{color:var(--low);} .j-中{color:var(--mid);} .j-高{color:var(--high);}
+    .j-低{color:var(--low);} .j-中{color:var(--mid);} .j-高{color:var(--high);} .judge.x{color:var(--high-strong);}
 
     /* AI 判讀 */
     .ai{margin-top:34px; border-top:1px solid var(--rule); padding-top:22px;}
@@ -147,6 +156,7 @@
 
     @media (prefers-reduced-motion: reduce){
       .rbar .mk{transition:none;} .sk{animation:none;} .spin{animation:none;}
+      .btn,.btn:hover,.btn:active{transform:none; transition:background .16s;} .nav a::after{transition:none;}
     }
     @media (max-width:760px){
       .cols{grid-template-columns:1fr; gap:26px;}
@@ -163,10 +173,13 @@
   <div class="wrap">
     <header class="rpt">
       <h1>投資組合體檢報告</h1>
-      <div class="meta">
-        <span id="who"></span>
-        <a href="/radar">財報變動雷達</a><a href="#" id="logout">登出</a>
-      </div>
+      <nav class="nav">
+        <a href="/dashboard" class="active">體檢報告</a>
+        <a href="/radar">財報雷達</a>
+        <a href="/eval">評估實驗</a>
+        <span class="who" id="who"></span>
+        <a href="#" id="logout" class="logout">登出</a>
+      </nav>
     </header>
 
     <div id="err" class="notice hidden"></div>
@@ -424,13 +437,13 @@
 
       // 檢驗項目表 + 範圍條
       $('examRows').innerHTML = EXAM.map(e => {
-        const sc = s.sub_scores[e.key]; const j = judgeOf(sc);
+        const sc = s.sub_scores[e.key]; const j = judgeOf(sc); const xt = sc >= 85 ? ' x' : '';
         const hint = typeof e.hint === 'function' ? e.hint(m) : e.hint;
         return `<div class="er">
           <span class="name">${e.name}<span class="sub">${hint}</span></span>
           <span class="val num">${e.fmt(m)}</span>
           <span class="barcell"><span class="rbar"><span class="z z1" style="flex:0 0 30%"></span><span class="z z2" style="flex:0 0 30%"></span><span class="z z3" style="flex:0 0 40%"></span><span class="mk" data-to="${sc}" style="left:0"></span></span></span>
-          <span class="judge j-${j}">${j==='低'?'正常':j==='中'?'留意':'偏高'}</span>
+          <span class="judge j-${j}${xt}">${j==='低'?'正常':j==='中'?'留意':'偏高'}</span>
         </div>`;
       }).join('');
 
