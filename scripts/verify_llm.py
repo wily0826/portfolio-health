@@ -27,10 +27,9 @@ FAKE_METRICS = {
     "max_drawdown": -0.134,
     "max_drawdown_abs": 0.134,
     "var_95_1d": 0.027,
-    "avg_correlation": 0.01,
-    "score": {"score": 62.8, "level": "高",
+    "score": {"score": 75.7, "level": "高",
               "sub_scores": {"top1_weight": 100, "sector_hhi": 100,
-                             "volatility": 57, "max_drawdown_abs": 24, "avg_correlation": 0}},
+                             "volatility": 57, "max_drawdown_abs": 24}},
 }
 
 

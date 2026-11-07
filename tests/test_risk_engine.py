@@ -8,7 +8,6 @@ from app.services.risk_engine import (
     InsufficientDataError,
     analyze,
     annualized_return,
-    avg_pairwise_correlation,
     compute_weights,
     hhi,
     historical_var,
@@ -101,16 +100,10 @@ def test_single_holding_no_nan():
     h = pd.DataFrame({"symbol": ["2330.TW"], "shares": [1000]})
     out = analyze(h, prices, {"2330.TW": "半導體業"})
     m = out["metrics"]
-    assert m["avg_correlation"] == 0.0
     assert m["top1_weight"] == pytest.approx(1.0)
     assert m["effective_n"] == pytest.approx(1.0)
     flat = [v for v in m.values() if isinstance(v, float)]
     assert not any(np.isnan(flat))
-
-
-def test_correlation_perfect():
-    r = pd.DataFrame({"A": [0.01, -0.02, 0.03, 0.0], "B": [0.02, -0.04, 0.06, 0.0]})
-    assert avg_pairwise_correlation(r) == pytest.approx(1.0)
 
 
 def test_portfolio_vol_matches_independent_calc():
@@ -160,7 +153,7 @@ def test_score_bounds_and_json():
 
 
 def test_score_extremes():
-    low = {"top1_weight": 0, "sector_hhi": 0, "volatility": 0, "max_drawdown_abs": 0, "avg_correlation": 0}
+    low = {"top1_weight": 0, "sector_hhi": 0, "volatility": 0, "max_drawdown_abs": 0}
     high = {k: 10 for k in low}
     assert risk_score(low)["score"] == 0
     assert risk_score(high)["score"] == 100

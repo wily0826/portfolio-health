@@ -59,13 +59,6 @@ def _independent_metrics(symbols, shares, prices_df, sector_map) -> dict:
         key = sector_map.get(sym) or "未分類"
         sec[key] = sec.get(key, 0.0) + float(wi)
     sector_hhi = float(np.sum(np.array(list(sec.values())) ** 2))
-    # 平均相關係數（上三角平均）
-    if R.shape[1] >= 2:
-        corr = np.corrcoef(R, rowvar=False)
-        iu = np.triu_indices_from(corr, k=1)
-        avg_corr = float(np.mean(corr[iu]))
-    else:
-        avg_corr = 0.0
 
     return {
         "top1_weight": float(w.max()),
@@ -77,7 +70,6 @@ def _independent_metrics(symbols, shares, prices_df, sector_map) -> dict:
         "sharpe": float(sharpe),
         "max_drawdown": float(mdd),
         "var_95_1d": var,
-        "avg_correlation": avg_corr,
         "n_observations": n,
     }
 
@@ -101,7 +93,7 @@ def verify_portfolio(name, rows) -> bool:
     ok = True
     for k in ["top1_weight", "stock_hhi", "effective_n", "sector_hhi", "volatility",
               "annual_return", "sharpe", "max_drawdown", "var_95_1d",
-              "avg_correlation", "n_observations"]:
+              "n_observations"]:
         a, b = eng[k], ind[k]
         denom = max(abs(a), 1e-12)
         rel = abs(a - b) / denom

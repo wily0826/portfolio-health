@@ -150,6 +150,41 @@
 
     .curve{margin-top:34px;}
 
+    /* 關注面向 chips（可多選，決定 AI 判讀與問答聚焦哪些面向） */
+    .focusbar{display:flex; align-items:center; gap:14px 16px; flex-wrap:wrap; margin-bottom:16px;}
+    .focusbar .flabel{font-size:15px; font-weight:700;}
+    .chips{display:flex; gap:8px; flex-wrap:wrap;}
+    .chip{font-size:14px; padding:7px 15px; border-radius:18px; border:1px solid var(--rule); background:#fff;
+      color:var(--muted); font-weight:500; display:inline-flex; align-items:center; gap:7px;
+      transition:border-color .15s ease, color .15s ease, background .15s ease,
+                 transform .12s cubic-bezier(.22,1,.36,1), box-shadow .16s ease;}
+    .chip .dot{width:7px; height:7px; border-radius:50%; background:currentColor; opacity:.5;}
+    .chip:hover{border-color:#B6C4C6; color:var(--ink); transform:translateY(-1px);}
+    .chip[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#fff;
+      box-shadow:0 4px 12px rgba(42,140,155,.22);}
+    .chip[aria-pressed="true"] .dot{opacity:1;}
+
+    /* 籌碼面表（數字由程式計算） */
+    .chips-panel{margin-top:32px;}
+    .chip-dir{font-weight:700;}
+    .chip-dir.up{color:var(--accent);} .chip-dir.down{color:var(--high);} .chip-dir.flat{color:var(--muted);}
+    .chip-delta.pos{color:var(--accent);} .chip-delta.neg{color:var(--high);} .chip-delta.zero{color:var(--muted);}
+
+    /* 對話式 AI */
+    .chatbox{margin-top:34px; border-top:1px solid var(--rule); padding-top:22px;}
+    .chat-log{display:flex; flex-direction:column; gap:10px; margin:14px 0; max-height:380px; overflow-y:auto;}
+    .msg{max-width:82%; padding:10px 14px; border-radius:13px; font-size:15px; line-height:1.65;
+      white-space:pre-wrap; word-break:break-word;}
+    .msg.me{align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:4px;}
+    .msg.ai{align-self:flex-start; background:#fff; border:1px solid var(--rule); border-bottom-left-radius:4px;}
+    .msg.ai.sys{color:var(--muted);}
+    .chat-empty{font-size:14px; color:var(--muted);}
+    .chat-input{display:flex; gap:10px; align-items:center;}
+    .chat-input input{flex:1; font-family:inherit; font-size:16px; padding:11px 15px; border:1px solid var(--rule);
+      border-radius:22px; background:var(--field); transition:border-color .15s ease, box-shadow .2s ease;}
+    .chat-input input:focus{border-color:var(--accent); outline:none; box-shadow:0 0 0 3px rgba(42,140,155,.15);}
+    .chat-input .btn{border-radius:22px;}
+
     /* 骨架 */
     .sk{background:linear-gradient(90deg,#EDF1F1 25%,#E3E9E9 37%,#EDF1F1 63%); background-size:400% 100%;
       animation:shim 1.3s ease infinite; border-radius:4px;}
@@ -208,6 +243,11 @@
 
     <!-- 產生健檢 -->
     <section>
+      <div class="focusbar">
+        <span class="flabel">關注面向</span>
+        <div class="chips" id="focusChips"></div>
+        <span class="hint">AI 判讀與問答只聚焦你選的面向（可多選）</span>
+      </div>
       <div class="runbar">
         <div><strong style="font-size:16px">風險健檢</strong>
           <span class="hint" id="runMsg" style="margin-left:10px"></span></div>
@@ -254,10 +294,36 @@
         <canvas id="lineCurve" height="96"></canvas>
       </div>
 
+      <!-- 籌碼面（程式計算，選到籌碼面才顯示） -->
+      <div class="chips-panel hidden" id="chipPanel">
+        <h2 class="sec" style="font-size:16px" id="chipTitle">籌碼面</h2>
+        <div class="tscroll"><table id="chipTbl">
+          <thead><tr>
+            <th>股票</th><th>三大法人（近期合計）</th><th class="ta-r">融資餘額增減</th>
+            <th class="ta-r">融券餘額增減</th><th class="ta-r">資券比</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <p class="hint" style="margin-top:10px">單位為「張」（1 張＝1000 股）；數字為近期合計 / 變化，由程式計算，非買賣訊號。</p>
+      </div>
+
       <!-- AI 判讀 -->
       <div class="ai">
         <h2 class="sec" style="font-size:20px;display:flex;justify-content:space-between;align-items:baseline">AI 判讀 <span class="srctag" id="srcTag"></span></h2>
         <div id="reportBody"></div>
+      </div>
+
+      <!-- 對話式 AI -->
+      <div class="chatbox">
+        <h2 class="sec" style="font-size:16px">問 AI（根據這份報告）</h2>
+        <div class="chat-log" id="chatLog">
+          <p class="chat-empty">可以追問這份報告，例如：「哪一項指標讓風險分數偏高？」「我的籌碼面怎麼看？」</p>
+        </div>
+        <form class="chat-input" id="chatForm">
+          <input id="chatMsg" maxlength="500" placeholder="輸入你的問題…" autocomplete="off">
+          <button class="btn" type="submit" id="chatSend">送出</button>
+        </form>
+        <p class="hint" style="margin-top:8px">只根據這份報告的數字回答，不提供買賣建議或目標價。</p>
       </div>
     </section>
 
@@ -399,10 +465,9 @@
       { key:'max_drawdown_abs',name:'最大回撤',   hint:'從高點跌幅',            fmt:m=>fmtPct(m.max_drawdown) },
       { key:'top1_weight',     name:'最大單一持股',hint:m=>m.top1_symbol||'',   fmt:m=>fmtPct(m.top1_weight) },
       { key:'sector_hhi',      name:'產業集中度', hint:'HHI，越高越集中',       fmt:m=>m.sector_hhi.toFixed(3) },
-      { key:'avg_correlation', name:'平均相關係數',hint:'持股同漲同跌程度',      fmt:m=>m.avg_correlation.toFixed(2) },
     ];
     const WHY = { top1_weight:'單一持股過度集中', sector_hhi:'產業過度集中', volatility:'波動度偏高',
-      max_drawdown_abs:'報酬回撤偏大', avg_correlation:'持股相關性偏高' };
+      max_drawdown_abs:'報酬回撤偏大' };
     function verdictText(s){
       const hi = Object.entries(s.sub_scores).filter(([k,v])=>v>=60).sort((a,b)=>b[1]-a[1]);
       if (!hi.length) return `整體風險<b>${s.level}</b>，各項指標大致均衡，沒有特別突出的風險來源。`;
@@ -459,6 +524,7 @@
       drawPie('pieHold','pieHoldEmpty', Object.keys(m.weights), Object.values(m.weights));
       drawPie('pieSector','pieSectorEmpty', Object.keys(m.sector_weights), Object.values(m.sector_weights));
       drawLine(res.curve.dates, res.curve.values);
+      renderChipPanel(res.chip_summary, res.focus);
 
       $('srcTag').textContent = res.report_source === 'llm' ? 'AI 生成' : '規則式備援（AI 未啟用或失敗）';
       $('reportBody').innerHTML = renderReport(res.ai_report)
@@ -481,10 +547,92 @@
       finally { btn.disabled = false; loadHoldings(); }
     };
 
+    // ── 關注面向（決定 AI 判讀與問答聚焦哪些面向） ──
+    let focusAll = ['risk','fundamental','chips'];
+    let focusLabels = { risk:'風險結構', fundamental:'基本面變動', chips:'籌碼面' };
+    let focusState = focusAll.slice();
+    function renderChips(){
+      const box = $('focusChips'); box.innerHTML = '';
+      for (const key of focusAll){
+        const on = focusState.includes(key);
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'chip'; b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        b.innerHTML = `<span class="dot"></span>${focusLabels[key] || key}`;
+        b.onclick = () => toggleFocus(key);
+        box.appendChild(b);
+      }
+    }
+    async function loadFocus(){
+      try { const d = await jget('/prefs'); focusAll = d.all || focusAll; focusLabels = d.labels || focusLabels; focusState = d.focus || focusAll.slice(); }
+      catch(e){ focusState = focusAll.slice(); }
+      renderChips();
+    }
+    async function toggleFocus(key){
+      const i = focusState.indexOf(key);
+      if (i >= 0){ if (focusState.length === 1) return; focusState.splice(i, 1); }  // 至少保留一個
+      else focusState.push(key);
+      renderChips();
+      try { const d = await jsend('PUT', '/prefs', { focus: focusState }); focusState = d.focus; renderChips(); }
+      catch(ex){ showErr(ex.message); }
+    }
+
+    // ── 籌碼面表（數字由程式計算；選到籌碼面才顯示） ──
+    const CHIP_DIR = { up:'偏買超', down:'偏賣超', flat:'大致持平' };
+    const lotsStr = (x) => x == null ? '—' : (x > 0 ? '+' : '') + Math.round(x).toLocaleString() + ' 張';
+    const deltaCls = (x) => x == null ? 'zero' : (x > 0 ? 'pos' : (x < 0 ? 'neg' : 'zero'));
+    function renderChipPanel(chips, focus){
+      const show = (focus || []).includes('chips') && chips && chips.length;
+      $('chipPanel').classList.toggle('hidden', !show);
+      if (!show) return;
+      $('chipTitle').textContent = `籌碼面（近 ${chips[0].window_days || 20} 日）`;
+      const tb = document.querySelector('#chipTbl tbody'); tb.innerHTML = '';
+      for (const c of chips){
+        const tr = document.createElement('tr');
+        if (c.inst_net_lots == null && c.margin_balance_lots == null){
+          tr.innerHTML = `<td><span class="sym">${c.symbol}</span></td><td colspan="4" class="hint">查無籌碼資料</td>`;
+          tb.appendChild(tr); continue;
+        }
+        const dir = c.inst_direction || 'flat';
+        const net = c.inst_net_lots;
+        tr.innerHTML = `
+          <td><span class="sym">${c.symbol}</span></td>
+          <td><span class="chip-dir ${dir}">${CHIP_DIR[dir]}</span>${net != null ? ' <span class="num">' + (net >= 0 ? '+' : '') + Math.round(net).toLocaleString() + ' 張</span>' : ''}</td>
+          <td class="ta-r num chip-delta ${deltaCls(c.margin_change_lots)}">${lotsStr(c.margin_change_lots)}</td>
+          <td class="ta-r num chip-delta ${deltaCls(c.short_change_lots)}">${lotsStr(c.short_change_lots)}</td>
+          <td class="ta-r num">${c.margin_short_ratio != null ? c.margin_short_ratio : '—'}</td>`;
+        tb.appendChild(tr);
+      }
+    }
+
+    // ── 對話式 AI（根據最近一份報告） ──
+    const chatHistory = [];
+    function addMsg(role, text, sys){
+      const log = $('chatLog');
+      const empty = log.querySelector('.chat-empty'); if (empty) empty.remove();
+      const el = document.createElement('div');
+      el.className = 'msg ' + (role === 'user' ? 'me' : 'ai') + (sys ? ' sys' : '');
+      el.textContent = text; log.appendChild(el); log.scrollTop = log.scrollHeight;
+      return el;
+    }
+    $('chatForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const inp = $('chatMsg'); const q = inp.value.trim(); if (!q) return;
+      addMsg('user', q); inp.value = '';
+      const send = $('chatSend'); send.disabled = true;
+      const thinking = addMsg('ai', '思考中…', true);
+      try {
+        const d = await jsend('POST', '/chat', { message: q, history: chatHistory.slice() });
+        thinking.remove();
+        addMsg('ai', d.text, d.source !== 'llm');
+        chatHistory.push({ role:'user', content:q }, { role:'assistant', content:d.text });
+      } catch(ex){ thinking.remove(); addMsg('ai', ex.message || '發生錯誤', true); }
+      finally { send.disabled = false; inp.focus(); }
+    };
+
     $('logout').onclick = async (e) => { e.preventDefault(); try { await jsend('POST','/auth/logout'); } finally { location.href='/'; } };
 
     (async function init(){
-      try { const me = await jget('/auth/me'); $('who').textContent = me.display_name; await loadHoldings(); }
+      try { const me = await jget('/auth/me'); $('who').textContent = me.display_name; await loadFocus(); await loadHoldings(); }
       catch(ex){ location.href = '/'; }
     })();
   </script>

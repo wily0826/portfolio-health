@@ -70,6 +70,14 @@ CREATE TABLE IF NOT EXISTS reports (
 );
 CREATE INDEX IF NOT EXISTS idx_user_created ON reports (user_id, created_at);
 
+-- 使用者偏好：AI 判讀的「關注面向」（risk / fundamental / chips），JSON 陣列
+CREATE TABLE IF NOT EXISTS user_prefs (
+  user_id    INTEGER PRIMARY KEY,
+  focus_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- ===== 財報變動偵測模組（SPEC-anomaly §8；對應 sql/schema_anomaly.sql 的 MySQL 版）=====
 CREATE TABLE IF NOT EXISTS universe (
   symbol   TEXT NOT NULL PRIMARY KEY,
@@ -277,6 +285,18 @@ def init_db() -> None:
             # 財報變動偵測 schema（以 anomalies 表存在與否判斷，可獨立補建）
             if not _mysql_table_exists(conn, "anomalies"):
                 _run_sql_file(conn, "schema_anomaly.sql")
+            # 使用者偏好表（後加的功能）：既有部署已有 users 表，故獨立補建，不走整檔重跑
+            if not _mysql_table_exists(conn, "user_prefs"):
+                conn.execute(
+                    "CREATE TABLE user_prefs ("
+                    "  user_id INT UNSIGNED PRIMARY KEY,"
+                    "  focus_json JSON NOT NULL,"
+                    "  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP "
+                    "    ON UPDATE CURRENT_TIMESTAMP,"
+                    "  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+                    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+                )
+                conn.commit()
         else:
             conn._raw.executescript(_SCHEMA_SQLITE)  # sqlite 專用
             conn.commit()

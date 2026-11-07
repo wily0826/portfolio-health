@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .db import init_db
 from .errors import AppError
-from .routers import anomalies, auth, holdings, reports, stocks
+from .routers import anomalies, auth, chat, holdings, prefs, reports, stocks
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -75,6 +75,8 @@ app.include_router(stocks.router)
 app.include_router(holdings.router)
 app.include_router(reports.router)
 app.include_router(anomalies.router)
+app.include_router(prefs.router)
+app.include_router(chat.router)
 
 
 @app.get("/api/health")

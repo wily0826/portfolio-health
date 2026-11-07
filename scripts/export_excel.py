@@ -122,15 +122,6 @@ def main(argv) -> int:
     DRAW = f"{draw_col}{r0}:{draw_col}{r1}"
     WRANGE = f"{sym_cols[0]}1:{sym_cols[-1]}1"
 
-    # 相關係數：所有配對 CORREL 平均
-    pairs = []
-    for a in range(k):
-        for b in range(a + 1, k):
-            ra = f"returns!{sym_cols[a]}{r0}:{sym_cols[a]}{r1}"
-            rb = f"returns!{sym_cols[b]}{r0}:{sym_cols[b]}{r1}"
-            pairs.append(f"CORREL({ra},{rb})")
-    corr_formula = f"=({'+'.join(pairs)})/{len(pairs)}" if pairs else "=0"
-
     # ---- Sheet 3: metrics（公式 vs 引擎）----
     wm = wb.create_sheet("metrics")
     wm.append(["指標", "Excel 公式重算", "引擎值", "差異(絕對值)"])
@@ -153,7 +144,6 @@ def main(argv) -> int:
         ("最大回撤 MDD", f"=MIN(returns!{DRAW})", eng["max_drawdown"]),
         ("歷史 VaR 95%(單日)",
          f"=MAX(0,-PERCENTILE.INC(returns!{PORT},0.05))", eng["var_95_1d"]),
-        ("平均相關係數", corr_formula, eng["avg_correlation"]),
     ]
     for ri, (label, formula, engval) in enumerate(rows_spec, start=2):
         wm.cell(row=ri, column=1, value=label)

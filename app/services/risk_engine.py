@@ -12,12 +12,12 @@ MIN_OBS = 60
 RISK_FREE_RATE = 0.015
 
 # 指標名: (low, high, 權重)。<= low 得 0 分，>= high 得 100 分，中間線性。權重總和必須為 1。
+# 2026-11：移除平均相關係數子分數後，其餘四項權重重新正規化為總和 1（D-A21）。
 SCORE_CONFIG = {
-    "top1_weight": (0.10, 0.50, 0.25),
-    "sector_hhi": (0.15, 0.50, 0.20),
-    "volatility": (0.10, 0.40, 0.25),
+    "top1_weight": (0.10, 0.50, 0.30),
+    "sector_hhi": (0.15, 0.50, 0.25),
+    "volatility": (0.10, 0.40, 0.30),
     "max_drawdown_abs": (0.05, 0.40, 0.15),
-    "avg_correlation": (0.20, 0.80, 0.15),
 }
 
 
@@ -93,15 +93,6 @@ def sector_weights(weights: pd.Series, sector_map: dict[str, str | None]) -> pd.
     return weights.groupby(keys).sum()
 
 
-def avg_pairwise_correlation(rets: pd.DataFrame) -> float:
-    if rets.shape[1] < 2:
-        return 0.0
-    corr = rets.corr().to_numpy()
-    upper = corr[np.triu_indices_from(corr, k=1)]
-    value = np.nanmean(upper) if not np.all(np.isnan(upper)) else 0.0
-    return float(value)
-
-
 def _scale(x: float, low: float, high: float) -> float:
     return float(np.clip((x - low) / (high - low), 0.0, 1.0) * 100.0)
 
@@ -158,7 +149,6 @@ def analyze(
         "max_drawdown": mdd,
         "max_drawdown_abs": abs(mdd),
         "var_95_1d": historical_var(p_rets, 0.95),
-        "avg_correlation": avg_pairwise_correlation(rets),
     }
     metrics["score"] = risk_score(metrics)
 

@@ -63,3 +63,11 @@ CREATE TABLE reports (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   INDEX idx_user_created (user_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 使用者偏好：AI 判讀的「關注面向」（risk / fundamental / chips），JSON 陣列
+CREATE TABLE user_prefs (
+  user_id    INT UNSIGNED PRIMARY KEY,
+  focus_json JSON NOT NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

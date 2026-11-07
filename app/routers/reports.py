@@ -10,7 +10,7 @@ from ..auth import CurrentUser
 from ..config import settings
 from ..db import get_conn
 from ..errors import insufficient_price_data, no_holdings, report_rate_limit
-from ..services import anomaly_service, report_service
+from ..services import anomaly_service, chips_service, prefs_service, report_service
 from ..services.price_service import (STATUS_READY, get_prices_df, get_sector_map,
                                       symbol_status)
 from ..services.risk_engine import InsufficientDataError, analyze
@@ -63,6 +63,9 @@ def create_report(user_id: int = CurrentUser):
     metrics = result["metrics"]
     curve = result["curve"]
 
+    # 使用者「關注面向」：決定 AI 判讀聚焦哪些面向，以及要不要抓籌碼（D-A22）
+    focus = prefs_service.get_focus(user_id)
+
     # 財報變動旗標（SPEC-anomaly §11）：加進給 LLM 的 metrics，產生「基本面提醒」段落。
     # 偵測結果不影響風險分數（D-A03）；取得失敗不應讓健檢失敗，故容錯。
     try:
@@ -71,8 +74,17 @@ def create_report(user_id: int = CurrentUser):
         alerts = []
     metrics["fundamental_alerts"] = alerts
 
-    # LLM 只拿 metrics（不含 curve），guard + 備援（§10）
-    report = report_service.generate_report(metrics)
+    # 籌碼面（可選面向）：只在使用者選到時即時彙總其持股，不落 DB（D-A22）
+    chip_summary: list[dict] = []
+    if "chips" in focus:
+        try:
+            chip_summary = chips_service.summarize_for(symbols)
+        except Exception:  # noqa: BLE001 — 籌碼取得失敗不應讓健檢失敗
+            chip_summary = []
+    metrics["chip_summary"] = chip_summary
+
+    # LLM 只拿 metrics（不含 curve），guard + 備援（§10）；段落依 focus 組裝
+    report = report_service.generate_report(metrics, focus)
     score = metrics["score"]
 
     conn = get_conn()
@@ -103,7 +115,9 @@ def create_report(user_id: int = CurrentUser):
         "report_source": report["source"],
         "risk_score": score["score"],
         "risk_level": score["level"],
+        "focus": focus,
         "fundamental_alerts": metrics.get("fundamental_alerts", []),
+        "chip_summary": metrics.get("chip_summary", []),
     }
 
 

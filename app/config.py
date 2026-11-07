@@ -70,6 +70,10 @@ class Settings:
     # 財報資料來源（SPEC-anomaly §5）。synthetic 為離線展示用，可完整端到端跑；
     # finmind 需 token，且正式啟用前必須先完成 A-02 驗證（填好 ITEM_MAP、確認現金流是否累計）。
     FUNDAMENTALS_SOURCE: str = os.getenv("FUNDAMENTALS_SOURCE", "synthetic")  # synthetic | finmind
+    # 籌碼面資料來源（法人買賣超、融資融券）。synthetic 為離線展示用，finmind 需 token。
+    # 籌碼面為「可選關注面向」，只在使用者選到時即時彙總其持股，不落 DB（見 chips_service）。
+    CHIPS_SOURCE: str = os.getenv("CHIPS_SOURCE", "synthetic")  # synthetic | finmind
+    CHIP_WINDOW_DAYS: int = _int_env("CHIP_WINDOW_DAYS", "20")  # 籌碼彙總回看的交易日數
     FINMIND_TOKEN: str = os.getenv("FINMIND_TOKEN", "")
     # 還原股價資料集。預設 TaiwanStockPriceAdj（需付費 backer/sponsor 方案）。
     # 免費 token 可暫設 TaiwanStockPrice（未還原）做開發，但除息日會被誤判下跌（違反 D-008），正式不可用。
